@@ -1507,7 +1507,20 @@
   "Compile the rules into a rete network and return the given session."
   [productions :- #{schema/Production}
    options :- {sc/Keyword sc/Any}]
-  (let [beta-graph (to-beta-graph productions)
+  (let [;; We need to put the productions in a sorted set here, instead of in mk-session, since we don't want
+        ;; a sorted set in the session-cache.  If we did only rule order would be used to compare set equality
+        ;; for finding a cache hit, and we want to use the entire production, which a non-sorted set does.
+        ;; When using a sorted set, for constant options,
+        ;; any session creation with n productions would be a cache hit if any previous session had n productions.
+        ;; Furthermore, we can avoid the work of sorting the set until we know that there was a cache miss.
+        ;;
+        ;; Note that this ordering is not for correctness; we are just trying to increase consistency of rulebase compilation,
+        ;; and hopefully thereby execution times, from run to run.
+        productions (into (sorted-set-by (fn [a b]
+                                           (< (-> a meta ::rule-load-order)
+                                              (-> b meta ::rule-load-order))))
+                          productions)
+        beta-graph (to-beta-graph productions)
         beta-tree (compile-beta-graph beta-graph)
         beta-root-ids (-> beta-graph :forward-edges (get 0)) ; 0 is the id of the virtual root node.
         beta-roots (vals (select-keys beta-tree beta-root-ids))
