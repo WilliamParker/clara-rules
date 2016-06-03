@@ -989,9 +989,10 @@
                            fact-binding (conj fact-binding))
 
             ;; Find children that all parent nodes have.
-            common-children-ids (apply s/union (-> (:forward-edges beta-graph)
-                                                   (select-keys parent-ids)
-                                                   (vals)))
+            common-children-ids (into (sorted-set)
+                                      (apply s/union (-> (:forward-edges beta-graph)
+                                                         (select-keys parent-ids)
+                                                         (vals))))
 
 
             id-to-condition-nodes (:id-to-condition-node beta-graph)
