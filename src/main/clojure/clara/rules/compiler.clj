@@ -955,10 +955,10 @@
      :beta-with-negations beta-graph}))
 
 ;; A beta graph with no nodes.
-(def ^:private empty-beta-graph {:forward-edges {}
-                                 :backward-edges {}
-                                 :id-to-condition-node {0 ::root-condition}
-                                 :id-to-production-node {}})
+(def ^:private empty-beta-graph {:forward-edges (sorted-map)
+                                 :backward-edges (sorted-map)
+                                 :id-to-condition-node (sorted-map 0 ::root-condition)
+                                 :id-to-production-node (sorted-map)})
 
 (sc/defn ^:private add-conjunctions :- {:beta-graph schema/BetaGraph
                                         :new-ids [sc/Int]
