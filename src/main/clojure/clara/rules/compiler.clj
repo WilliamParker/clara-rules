@@ -1304,7 +1304,7 @@
                          (if (empty? pending-ids)
                            sorted-nodes
 
-                           (let [newly-satisfied-ids (into (sorted-set)
+                           (let [newly-satisfied-ids (into #{}
                                                            (for [pending-id pending-ids
                                                                  :when (empty? (get node-deps pending-id))]
                                                              pending-id))
@@ -1343,7 +1343,10 @@
                                        (= #{0} (get backward-edges id-to-compile))
                                        children
                                        compile-expr)))))
-            {}
+            ;; The node IDs have been determined before now, so we just need to sort the map returned.
+            ;; This matters because the engine will left-activate the beta roots with the empty token
+            ;; in the order that this map is seq'ed over.
+            (sorted-map)
             ids-to-compile)))
 
 
