@@ -414,7 +414,6 @@
     :condition
     (first expression)))
 
-
 (defn- cartesian-join
   "Performs a cartesian join to distribute disjunctions for disjunctive normal form.,
   This distributing each disjunction across every other disjunction and also across each
@@ -1088,8 +1087,7 @@
                           {:beta-graph (:beta-graph new-result)
                            :new-ids (into (:new-ids previous-result) (:new-ids new-result))
                            :bindings (set/union (:bindings previous-result)
-                                                (:bindings new-result)) }
-                          ))
+                                                (:bindings new-result))}))
 
                       ;; Initial reduce value, combining previous graph, parent ids, and ancestor variable bindings.
                       {:beta-graph beta-with-negations
@@ -1306,7 +1304,7 @@
                          (if (empty? pending-ids)
                            sorted-nodes
 
-                           (let [newly-satisfied-ids (into #{}
+                           (let [newly-satisfied-ids (into (sorted-set)
                                                            (for [pending-id pending-ids
                                                                  :when (empty? (get node-deps pending-id))]
                                                              pending-id))
@@ -1344,8 +1342,7 @@
                                        ;; 0 is the id of the root node.
                                        (= #{0} (get backward-edges id-to-compile))
                                        children
-                                       compile-expr))))
-              )
+                                       compile-expr)))))
             {}
             ids-to-compile)))
 
