@@ -1369,11 +1369,18 @@
                                    (update-in node-map [[condition env]] conj node-id)
                                    (assoc node-map [condition env] [node-id])))
                                {}
-                               condition-to-node-ids)]
+                               condition-to-node-ids)
+
+        ;; We sort the alpha nodes by the sum of the node ids they correspond to
+        ;; in order to make the order of alpha nodes for any given type consistent.
+        ;; At least, it will be once node-id is consistent.  A fact should be propagated to
+        ;; alpha nodes in the order that they are returned here.
+        condition-to-node-entries (sort-by (fn [[k v]] (apply + v))
+                                           condition-to-node-map)]
 
     ;; Compile conditions into functions.
     (vec
-     (for [[[condition env] node-ids] condition-to-node-map
+     (for [[[condition env] node-ids] condition-to-node-entries
            :when (:type condition) ; Exclude test conditions.
            ]
 
