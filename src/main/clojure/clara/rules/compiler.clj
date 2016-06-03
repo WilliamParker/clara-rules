@@ -886,12 +886,12 @@
                      forward-path
                      (if forward-previous
                        (conj forward-previous target-id)
-                       #{target-id}))
+                       (sorted-set target-id)))
                     (assoc-in
                      backward-path
                      (if backward-previous
                        (conj backward-previous source-id)
-                       #{source-id})))))
+                       (sorted-set source-id))))))
 
             beta-graph
             source-ids)))
