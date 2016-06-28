@@ -839,6 +839,9 @@
                         (conj constraint-bindings (:fact-binding condition))
                         constraint-bindings)
 
+        new-bindings (s/difference (variables-as-keywords (:constraints condition))
+                                             parent-bindings)
+
         join-filter-bindings (if join-filter-expressions
                                (variables-as-keywords join-filter-expressions)
                                nil)]
@@ -846,6 +849,7 @@
         (cond->
             {:node-type node-type
              :condition condition
+             :new-bindings new-bindings
              :used-bindings (s/union cond-bindings join-filter-bindings)}
 
           (seq env) (assoc :env env)
@@ -869,7 +873,11 @@
    target-node :- (sc/either schema/ConditionNode schema/ProductionNode)]
 
   ;; Add the production or condition to the network.
-  (let [beta-graph (if (#{:production :query} (:node-type target-node))
+  (let [beta-graph (assoc-in beta-graph [:id-to-new-bindings target-id]
+                             (or (:new-bindings target-node)
+                                 #{}))
+
+        beta-graph (if (#{:production :query} (:node-type target-node))
                           (assoc-in beta-graph [:id-to-production-node target-id] target-node)
                           (assoc-in beta-graph [:id-to-condition-node target-id] target-node))]
 
@@ -957,7 +965,8 @@
 (def ^:private empty-beta-graph {:forward-edges (sorted-map)
                                  :backward-edges (sorted-map)
                                  :id-to-condition-node (sorted-map 0 ::root-condition)
-                                 :id-to-production-node (sorted-map)})
+                                 :id-to-production-node (sorted-map)
+                                 :id-to-new-bindings (sorted-map)})
 
 (sc/defn ^:private add-conjunctions :- {:beta-graph schema/BetaGraph
                                         :new-ids [sc/Int]
@@ -1143,7 +1152,8 @@
    id :- sc/Int
    is-root :- sc/Bool
    children :- [sc/Any]
-   compile-expr ] ; Function to do the evaluation.
+   compile-expr ; Function to do the evaluation.
+   new-bindings :- #{sc/Keyword}]
 
   (let [{:keys [condition production query join-bindings]} beta-node
 
@@ -1258,7 +1268,8 @@
                                                 (:env beta-node))))
            (:result-binding beta-node)
            children
-           join-bindings)
+           join-bindings
+           (:new-bindings beta-node))
 
           ;; All unification is based on equality, so just use the simple accumulate node.
           (eng/->AccumulateNode
@@ -1270,7 +1281,8 @@
            compiled-accum
            (:result-binding beta-node)
            children
-           join-bindings)))
+           join-bindings
+           (:new-bindings beta-node))))
 
       :production
       (eng/->ProductionNode
@@ -1294,7 +1306,7 @@
 
 (sc/defn ^:private compile-beta-graph :- {sc/Int sc/Any}
   "Compile the beta description to the nodes used at runtime."
-  [{:keys [id-to-production-node id-to-condition-node forward-edges backward-edges]} :- schema/BetaGraph]
+  [{:keys [id-to-production-node id-to-condition-node id-to-new-bindings forward-edges backward-edges]} :- schema/BetaGraph]
   (let [;; A local, memoized function that ensures that the same expression of
         ;; a given node :id is only compiled into a single function.
         ;; This prevents redundant compilation and avoids having a Rete node
@@ -1349,7 +1361,8 @@
                                        ;; 0 is the id of the root node.
                                        (= #{0} (get backward-edges id-to-compile))
                                        children
-                                       compile-expr)))))
+                                       compile-expr
+                                       (get id-to-new-bindings id-to-compile))))))
             ;; The node IDs have been determined before now, so we just need to sort the map returned.
             ;; This matters because the engine will left-activate the beta roots with the empty token
             ;; in the order that this map is seq'ed over.
