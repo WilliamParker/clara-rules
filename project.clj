@@ -21,35 +21,35 @@
   :java-source-paths ["src/main/java"]
   :javac-options ["-target" "1.6" "-source" "1.6"]
   :clean-targets ^{:protect false} ["resources/public/js" "target"]
-  :hooks [leiningen.cljsbuild]
-  :cljsbuild {:builds [;; Simple mode compilation for tests.
-                       {:id "figwheel"
-                        :source-paths ["src/test/clojurescript" "src/test/common"]
-                        :figwheel true
-                        :compiler {:main "clara.test"
-                                   :output-to "resources/public/js/simple.js"
-                                   :output-dir "resources/public/js/out"
-                                   :asset-path "js/out"
-                                   :optimizations :none}}
+  ;; :hooks [leiningen.cljsbuild]
+  ;; :cljsbuild {:builds [;; Simple mode compilation for tests.
+  ;;                      {:id "figwheel"
+  ;;                       :source-paths ["src/test/clojurescript" "src/test/common"]
+  ;;                       :figwheel true
+  ;;                       :compiler {:main "clara.test"
+  ;;                                  :output-to "resources/public/js/simple.js"
+  ;;                                  :output-dir "resources/public/js/out"
+  ;;                                  :asset-path "js/out"
+  ;;                                  :optimizations :none}}
 
-                       {:id "simple"
-                        :source-paths ["src/test/clojurescript" "src/test/common"]
-                        :compiler {:output-to "target/js/simple.js"
-                                   :optimizations :whitespace}}
+  ;;                      {:id "simple"
+  ;;                       :source-paths ["src/test/clojurescript" "src/test/common"]
+  ;;                       :compiler {:output-to "target/js/simple.js"
+  ;;                                  :optimizations :whitespace}}
 
-                       ;; Advanced mode compilation for tests.
-                       {:id "advanced"
-                        :source-paths ["src/test/clojurescript" "src/test/common"]
-                        :compiler {:output-to "target/js/advanced.js"
-                                   :optimizations :advanced}}]
+  ;;                      ;; Advanced mode compilation for tests.
+  ;;                      {:id "advanced"
+  ;;                       :source-paths ["src/test/clojurescript" "src/test/common"]
+  ;;                       :compiler {:output-to "target/js/advanced.js"
+  ;;                                  :optimizations :advanced}}]
 
-              :test-commands {"phantom-simple" ["phantomjs"
-                                                "src/test/js/runner.js"
-                                                "src/test/html/simple.html"]
+  ;;             :test-commands {"phantom-simple" ["phantomjs"
+  ;;                                               "src/test/js/runner.js"
+  ;;                                               "src/test/html/simple.html"]
 
-                              "phantom-advanced" ["phantomjs"
-                                                  "src/test/js/runner.js"
-                                                  "src/test/html/advanced.html"]}}
+  ;;                             "phantom-advanced" ["phantomjs"
+  ;;                                                 "src/test/js/runner.js"
+  ;;                                                 "src/test/html/advanced.html"]}}
   :scm {:name "git"
         :url "https://github.com/rbrush/clara-rules"}
   :pom-addition [:developers [:developer

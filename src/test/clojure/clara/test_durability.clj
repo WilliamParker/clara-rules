@@ -1,12 +1,18 @@
 (ns clara.test-durability
   (:require [clara.rules :refer :all]
             [clara.rules.dsl :as dsl]
+            [clara.rules.engine :as eng]
             [clara.rules.durability :as d]
             [clara.rules.accumulators :as acc]
             [clara.rules.testfacts :refer :all]
+            [clojure.java.io :as jio]
             [clojure.test :refer :all]
             schema.test)
-  (:import [clara.rules.testfacts Temperature Cold]))
+  (:import [clara.rules.testfacts
+            Temperature
+            Cold
+            Hot
+            TemperatureHistory]))
 
 (use-fixtures :once schema.test/validate-schemas)
 
@@ -161,3 +167,145 @@
              [])
           "When two duplicate Cold facts are inserted from two duplicate Temperature facts,
            and both Temperature facts are retracted, no Cold facts should remain."))))
+
+(defrule all-colds
+  [Temperature (= ?t temperature)]
+  [?cs <- (acc/all) :from [Cold (< temperature ?t)]]
+  =>
+  (insert! (->TemperatureHistory (mapv :temperature ?cs))))
+
+;; TODO find out how the mistake on not calling the compiled-accum fn didn't break this.
+(defrule all-hots
+  [Temperature (= ?t temperature)]
+  [?cs <- (acc/all) :from [Hot (= temperature ?t)]]
+  =>
+  (insert! (->TemperatureHistory (mapv :temperature ?cs))))
+
+(defrule hot-or-cold-match
+  [:or
+   [Hot (= ?t temperature)]
+   [Cold (= ?t temperature)]]
+  [Temperature (= ?t temperature)]
+  =>
+  (insert! (->TemperatureHistory [?t])))
+
+(defquery find-hist
+  []
+  [?his <- TemperatureHistory])
+
+(def durability-sample (mk-session [all-colds all-hots hot-or-cold-match find-hist] :cache false))
+
+(deftest test-store-to-and-restore-from-rulebase-state
+  (let [run-session (fn [session]
+                      (-> session
+                          (insert (->Temperature 50 "MCI")
+                                  (->Hot 50)
+                                  (->Hot 10)
+                                  (->Cold 50)
+                                  (->Cold 10)
+                                  (->Cold 20))
+                          fire-rules
+                          (query find-hist)
+                          frequencies))
+        
+        orig-results (run-session durability-sample)
+        tmp (doto (java.io.File/createTempFile "test-rulebase-store" "clj")
+              .deleteOnExit)]
+
+    (with-open [out (jio/output-stream tmp)]
+      (d/store-rulebase-state-to durability-sample out))
+
+    (with-open [in (jio/input-stream tmp)]
+      (let [{:keys [memory transport listeners get-alphas-fn]} (eng/components durability-sample)
+            rulebase (d/restore-rulebase-state-from in)
+            restored (eng/assemble {:rulebase rulebase ; restored rulebase
+                                    :memory memory
+                                    :transport transport
+                                    :listeners listeners
+                                    :get-alphas-fn get-alphas-fn})]
+        (is (= orig-results
+               (run-session restored)))))
+    
+    (.delete tmp)))
+
+(deftest test-store-to-and-restore-from-session-state
+  (let [unfired (-> durability-sample
+                    (insert (->Temperature 50 "MCI")
+                            (->Hot 50)
+                            (->Hot 10)
+                            (->Cold 50)
+                            (->Cold 10)
+                            (->Cold 20)))
+        fired (fire-rules unfired)
+        orig-results (frequencies (query fired find-hist))
+
+        tmp1 (doto (java.io.File/createTempFile "test-session-store-1" "clj")
+               .deleteOnExit)
+        tmp2 (doto (java.io.File/createTempFile "test-session-store-2" "clj")
+               .deleteOnExit)
+        tmp3 (doto (java.io.File/createTempFile "test-session-store-3" "clj")
+               .deleteOnExit)]
+
+    (testing ":store-rulebase? true"
+      (with-open [out (jio/output-stream tmp1)]
+        (d/store-session-state-to fired
+                                  out
+                                  {:with-rulebase? true}))
+
+      (with-open [in (jio/input-stream tmp1)]
+        (let [restored (d/restore-session-state-from in
+                                                     {})]
+          (is (= orig-results
+                 (frequencies (query restored find-hist)))))))
+
+    (testing ":store-rulebase? false"
+      (with-open [out (jio/output-stream tmp2)]
+        (d/store-session-state-to fired
+                                  out
+                                  {:with-rulebase? false}))
+      
+      (with-open [in (jio/input-stream tmp2)]
+        (let [restored (d/restore-session-state-from in
+                                                     {:base-session fired})]
+          (is (= orig-results
+                 (frequencies (query restored find-hist)))))))
+
+    (testing "un-fired session stored, restored, and fired"
+      (with-open [out (jio/output-stream tmp3)]
+        (d/store-session-state-to unfired
+                                  out
+                                  {:with-rulebase? false}))
+      
+      (with-open [in (jio/input-stream tmp3)]
+        (let [restored (d/restore-session-state-from in
+                                                     {:base-session unfired})]
+          (is (= orig-results
+                 (frequencies (-> restored
+                                  fire-rules
+                                  (query find-hist))))))))
+    
+    (.delete tmp1)
+    (.delete tmp2)
+    (.delete tmp3)))
+
+
+(comment ;; TESTING
+  (do
+    (require 'clara.rules.durability
+             'clara.test-durability
+             :reload)
+
+    (def tmp (jio/file "tmp"))
+    (def ss (d/->PrintDupSessionSerializer tmp tmp))
+    (def ms (d/->InMemoryMemoryFactsSerializer (atom nil)))
+    (def fired (-> durability-sample
+                   (insert (->Temperature 50 "MCI")
+                           (->Hot 50)
+                           (->Hot 10)
+                           (->Cold 50)
+                           (->Cold 10)
+                           (->Cold 20))
+                   fire-rules))
+    (d/serialize-session-state fired ss ms {:with-rulebase? true})
+    (def restored (d/deserialize-session-state ss ms {}))
+    (= (query fired find-hist) (query restored find-hist))))

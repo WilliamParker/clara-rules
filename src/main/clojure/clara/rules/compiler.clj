@@ -181,7 +181,7 @@
 
 (def ^:dynamic *compile-ctx* nil)
 
-(defn- try-eval
+(defn try-eval
   "Evals the given `expr`.  If an exception is thrown, it is caught and an
    ex-info exception is thrown with more details added.  Uses *compile-ctx*
    for additional contextual info to add to the exception details."
@@ -1161,22 +1161,26 @@
          condition
          children
          join-bindings)
+        
         ;; If the join operation includes arbitrary expressions
         ;; that can't expressed as a hash join, we must use the expressions
         (if (:join-filter-expressions beta-node)
-          (eng/->ExpressionJoinNode
-           id
-           condition
-           (binding [*compile-ctx* {:condition condition
-                                    :join-filter-expressions (:join-filter-expressions beta-node)
-                                    :env (:env beta-node)
-                                    :msg "compiling expression join node"}]
-             (compile-expr id
-                           (compile-join-filter (:join-filter-expressions beta-node)
-                                                (:join-filter-join-bindings beta-node)
-                                                (:env beta-node))))
-           children
-           join-bindings)
+          (let [join-filter-expr (compile-join-filter (:join-filter-expressions beta-node)
+                                                      (:join-filter-join-bindings beta-node)
+                                                      (:env beta-node))]
+            (with-meta
+              (eng/->ExpressionJoinNode
+               id
+               condition
+               (binding [*compile-ctx* {:condition condition
+                                        :join-filter-expressions (:join-filter-expressions beta-node)
+                                        :env (:env beta-node)
+                                        :msg "compiling expression join node"}]
+                 (compile-expr id
+                               join-filter-expr))
+               children
+               join-bindings)
+              {:join-filter-expr join-filter-expr}))
           (eng/->HashJoinNode
            id
            condition
@@ -1189,19 +1193,22 @@
       ;; and use the appropriate node type.
       (if (:join-filter-expressions beta-node)
 
-        (eng/->NegationWithJoinFilterNode
-         id
-         condition
-         (binding [*compile-ctx* {:condition condition
-                                  :join-filter-expressions (:join-filter-expressions beta-node)
-                                  :env (:env beta-node)
-                                  :msg "compiling negation with join filter node"}]
-           (compile-expr id
-                         (compile-join-filter (:join-filter-expressions beta-node)
-                                              (:join-filter-join-bindings beta-node)
-                                              (:env beta-node))))
-         children
-         join-bindings)
+        (let [join-filter-expr (compile-join-filter (:join-filter-expressions beta-node)
+                                                    (:join-filter-join-bindings beta-node)
+                                                    (:env beta-node))]
+          (with-meta
+            (eng/->NegationWithJoinFilterNode
+             id
+             condition
+             (binding [*compile-ctx* {:condition condition
+                                      :join-filter-expressions (:join-filter-expressions beta-node)
+                                      :env (:env beta-node)
+                                      :msg "compiling negation with join filter node"}]
+               (compile-expr id
+                             join-filter-expr))
+             children
+             join-bindings)
+            {:join-filter-expr join-filter-expr}))
 
         (eng/->NegationNode
          id
@@ -1210,24 +1217,28 @@
          join-bindings))
 
       :test
-      (eng/->TestNode
-       id
-       (binding [*compile-ctx* {:condition condition
-                                :env (:env beta-node)
-                                :msg "compiling test node"}]
-         (compile-expr id
-                       (compile-test (:constraints condition))))
-       children)
+      (let [test-expr (compile-test (:constraints condition))]
+        (with-meta
+          (eng/->TestNode
+           id
+           (binding [*compile-ctx* {:condition condition
+                                    :env (:env beta-node)
+                                    :msg "compiling test node"}]
+             (compile-expr id
+                           test-expr))
+           children)
+          {:test-expr test-expr}))
 
       :accumulator
       ;; We create an accumulator that accepts the environment for the beta node
       ;; into its context, hence the function with the given environment.
-      (let [compiled-node (binding [*compile-ctx* {:condition condition
+      (let [accum-expr (compile-accum (:accumulator beta-node) (:env beta-node))
+            compiled-node (binding [*compile-ctx* {:condition condition
                                                    :accumulator (:accumulator beta-node)
                                                    :env (:env beta-node)
                                                    :msg "compiling accumulator"}]
                             (compile-expr id
-                                          (compile-accum (:accumulator beta-node) (:env beta-node))))
+                                          accum-expr))
             compiled-accum (compiled-node (:env beta-node))]
 
         ;; Ensure the compiled accumulator has the expected structure
@@ -1239,52 +1250,61 @@
 
         (if (:join-filter-expressions beta-node)
 
-          (eng/->AccumulateWithJoinFilterNode
-           id
-           ;; Create an accumulator structure for use when examining the node or the tokens
-           ;; it produces.
-           {:accumulator (:accumulator beta-node)
-            ;; Include the original filter expressions in the constraints for inspection tooling.
-            :from (update-in condition [:constraints]
-                             into (-> beta-node :join-filter-expressions :constraints))}
-           compiled-accum
-           (binding [*compile-ctx* {:condition condition
-                                    :join-filter-expressions (:join-filter-expressions beta-node)
-                                    :env (:env beta-node)
-                                    :msg "compiling accumulate with join filter node"}]
-             (compile-expr id
-                           (compile-join-filter (:join-filter-expressions beta-node)
-                                                (:join-filter-join-bindings beta-node)
-                                                (:env beta-node))))
-           (:result-binding beta-node)
-           children
-           join-bindings)
+          (let [join-filter-expr (compile-join-filter (:join-filter-expressions beta-node)
+                                                      (:join-filter-join-bindings beta-node)
+                                                      (:env beta-node))]
+            (with-meta
+              (eng/->AccumulateWithJoinFilterNode
+               id
+               ;; Create an accumulator structure for use when examining the node or the tokens
+               ;; it produces.
+               {:accumulator (:accumulator beta-node)
+                ;; Include the original filter expressions in the constraints for inspection tooling.
+                :from (update-in condition [:constraints]
+                                 into (-> beta-node :join-filter-expressions :constraints))}
+               compiled-accum
+               (binding [*compile-ctx* {:condition condition
+                                        :join-filter-expressions (:join-filter-expressions beta-node)
+                                        :env (:env beta-node)
+                                        :msg "compiling accumulate with join filter node"}]
+                 (compile-expr id
+                               join-filter-expr))
+               (:result-binding beta-node)
+               children
+               join-bindings)
+              {:accum-expr accum-expr
+               :join-filter-expr join-filter-expr}))
 
           ;; All unification is based on equality, so just use the simple accumulate node.
-          (eng/->AccumulateNode
-           id
-           ;; Create an accumulator structure for use when examining the node or the tokens
-           ;; it produces.
-           {:accumulator (:accumulator beta-node)
-            :from condition}
-           compiled-accum
-           (:result-binding beta-node)
-           children
-           join-bindings)))
+          (with-meta
+            (eng/->AccumulateNode
+             id
+             ;; Create an accumulator structure for use when examining the node or the tokens
+             ;; it produces.
+             {:accumulator (:accumulator beta-node)
+              :from condition}
+             compiled-accum
+             (:result-binding beta-node)
+             children
+             join-bindings)
+            {:accum-expr accum-expr})))
 
       :production
-      (eng/->ProductionNode
-       id
-       production
-       (with-bindings (cond-> {#'*file* (-> production :rhs meta :file)
-                               #'*compile-ctx* {:production production
-                                                :msg "compiling production node"}}
-                        (:ns-name production) (assoc #'*ns* (the-ns (:ns-name production))))
-         (compile-expr id
-                       (with-meta (compile-action (:bindings beta-node)
-                                                  (:rhs production)
-                                                  (:env production))
-                         (meta (:rhs production))))))
+      (let [action-expr (with-meta (compile-action (:bindings beta-node)
+                                                   (:rhs production)
+                                                   (:env production))
+                          (meta (:rhs production)))]
+        (with-meta
+          (eng/->ProductionNode
+           id
+           production
+           (with-bindings (cond-> {#'*file* (-> production :rhs meta :file)
+                                   #'*compile-ctx* {:production production
+                                                    :msg "compiling production node"}}
+                            (:ns-name production) (assoc #'*ns* (the-ns (:ns-name production))))
+             (compile-expr id
+                           action-expr)))
+          {:action-expr action-expr}))
 
       :query
       (eng/->QueryNode
@@ -1402,19 +1422,22 @@
   [alpha-nodes :- [schema/AlphaNode]]
   (for [{:keys [condition beta-children env]} alpha-nodes
         :let [{:keys [type constraints fact-binding args]} condition
-              cmeta (meta condition)]]
+              cmeta (meta condition)
+              alpha-expr (with-meta (compile-condition
+                                     type (first args)  constraints
+                                     fact-binding env)
+                           (meta condition))]]
 
-    (cond-> {:type (effective-type type)
-             :alpha-fn (binding [*file* (or (:file cmeta) *file*)
-                                 *compile-ctx* {:condition condition
-                                                :env env
-                                                :msg "compiling alpha node"}]
-                         (try-eval (with-meta (compile-condition
-                                               type (first args)  constraints
-                                               fact-binding env)
-                                     (meta condition))))
-             :children beta-children}
-      env (assoc :env env))))
+    (with-meta
+      (cond-> {:type (effective-type type)
+               :alpha-fn (binding [*file* (or (:file cmeta) *file*)
+                                   *compile-ctx* {:condition condition
+                                                  :env env
+                                                  :msg "compiling alpha node"}]
+                           (try-eval alpha-expr))
+               :children beta-children}
+        env (assoc :env env))
+      {:alpha-expr alpha-expr})))
 
 (sc/defn build-network
   "Constructs the network from compiled beta tree and condition functions."
@@ -1441,9 +1464,11 @@
                              entry))
 
         ;; type, alpha node tuples.
-        alpha-nodes (for [{:keys [type alpha-fn children env]} alpha-fns
+        alpha-nodes (for [{:keys [type alpha-fn children env] :as alpha-map} alpha-fns
                           :let [beta-children (map id-to-node children)]]
-                      [type (eng/->AlphaNode env beta-children alpha-fn)])
+                      [type (with-meta
+                              (eng/->AlphaNode env beta-children alpha-fn)
+                              {:alpha-expr (:alpha-expr (meta alpha-map))})])
 
         ;; Merge the alpha nodes into a multi-map
         alpha-map (reduce
