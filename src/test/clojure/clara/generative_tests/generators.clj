@@ -3,8 +3,14 @@
             [clara.rules :refer :all]
             [schema.core :as sc]))
 
-(sc/defschema SessionOperation {:type (sc/enum :insert :retract :fire)
-                                :facts (sc/maybe [sc/Any])})
+(sc/defschema FactSessionOperation {:type (sc/enum :insert :retract)
+                                    :facts [sc/Any]})
+
+(sc/defschema FireSessionOperation {:type (sc/enum :fire)})
+
+(sc/defschema SessionOperation (sc/conditional
+                                #(= (:type %) :fire) FireSessionOperation
+                                :else FactSessionOperation))
 
 (defn session-run-ops [session ops]
   (let [final-session (reduce (fn [session op]
