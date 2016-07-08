@@ -5,6 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/clojurescript "1.7.170" :scope "provided"]
+                 [org.clojure/math.combinatorics "0.1.3" :scope "test"]
                  [prismatic/schema "1.0.1"]]
   :plugins [[lein-codox "0.9.0" :exclusions [org.clojure/clojure]]
             [lein-javadoc "0.2.0" :exclusions [org.clojure/clojure]]
