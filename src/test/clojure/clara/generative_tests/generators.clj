@@ -12,7 +12,9 @@
                                 #(= (:type %) :fire) FireSessionOperation
                                 :else FactSessionOperation))
 
-(defn session-run-ops [session ops]
+(defn session-run-ops
+  "Run the provided sequence of operations on the provide session and return the final session."
+  [session ops]
   (let [final-session (reduce (fn [session op]
                                 (let [new-session (condp = (:type op)
                                                     :insert (insert-all session (:facts op))
@@ -36,18 +38,16 @@
         any-count-negative? (fn [fc]
                               (boolean (some neg? (vals fc))))]
     
-    (if (= ::premature-retract (reduce (fn [fact-count op]
-                                         (let [new-count (condp = (:type op)
-                                                           :insert (inc-fact-count fact-count (:facts op))
-                                                           :retract (dec-fact-count fact-count (:facts op))
-                                                           fact-count)]
-                                           (if (any-count-negative? new-count)
-                                             (reduced ::premature-retract)
-                                             new-count)))
-                                       {}
-                                       ops))
-      true
-      false)))
+    (= ::premature-retract (reduce (fn [fact-count op]
+                                     (let [new-count (condp = (:type op)
+                                                       :insert (inc-fact-count fact-count (:facts op))
+                                                       :retract (dec-fact-count fact-count (:facts op))
+                                                       fact-count)]
+                                       (if (any-count-negative? new-count)
+                                         (reduced ::premature-retract)
+                                         new-count)))
+                                   {}
+                                   ops))))
 
 (defn ^:private ops->add-insert-retract
   "Takes an operations sequence and returns a sequence of sequences of operations
@@ -78,6 +78,11 @@
          extra-subsets)))
 
 (sc/defn ops->permutations :- [[SessionOperation]]
+  "Given a sequence of operations, return all permutations of the operations for 
+   which no retraction of a fact that has not yet been inserted occurs.  By default 
+   permutations where extra insertions and retractions in equal number of inserted facts
+   are added will be present.  The default number of such pairs allowed to be added per insertion
+   is 1."
   [ops :- [SessionOperation]
    {:keys [dup-level] :or {:dup-level 1}}]
   (let [dup-ops-seqs (ops->add-insert-retract ops dup-level)
@@ -88,7 +93,8 @@
     ;; effectively removes the retraction from the seq of operations since retractions of facts
     ;; that are not present do not cause alteration of the session state.  The idea of these helpers
     ;; is to produce orders of operations that should all have the same outcomes.
-    ;; The following would have an A when done: retract A, insert A
+    ;; The following would have an A when done:
+    ;; retract A, insert A
     ;; while this would not:
     ;; insert A, retract A
     ;;
