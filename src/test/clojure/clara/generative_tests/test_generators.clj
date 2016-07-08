@@ -1,6 +1,10 @@
 (ns clara.generative-tests.test-generators
-  (:require [clara.generative-tests.generators :refer :all]
-            [clojure.test :refer :all]))
+  (:require
+   [clara.generative-tests.generators :refer :all]
+   [clojure.test :refer :all]
+   [schema.test]))
+
+(use-fixtures :once schema.test/validate-schemas)
 
 ;; Basic sanity test of the insert/retract/fire permutation generation.
 (deftest test-basic-permutations

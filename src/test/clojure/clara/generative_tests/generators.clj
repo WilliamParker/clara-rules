@@ -43,26 +43,34 @@
       true
       false)))
 
-(defn ops->add-insert-retract [ops dup-level]
+(defn ^:private ops->add-insert-retract
+  [ops dup-level]
   (let [ops->extra (fn [ops]
-                     (mapcat (fn [op]
-                               (when (= (:type op)
-                                        :insert)
-                                 [{:type :insert
-                                   :facts (:facts op)}
-                                  {:type :retract
-                                   :facts (:facts op)}]))
-                             ops))]
-    (apply concat ops
-           (repeat dup-level (ops->extra ops)))))
+                     (map (fn [op]
+                            (when (= (:type op)
+                                     :insert)
+                              [{:type :insert
+                                :facts (:facts op)}
+                               {:type :retract
+                                :facts (:facts op)}]))
+                          ops))
+        extras-with-dups (apply concat (repeat dup-level
+                                               (ops->extra ops)))
 
-(sc/defn ops->permutations
+        extra-subsets (combo/subsets extras-with-dups)]
+
+    (map (fn [extras]
+           (into ops (apply concat extras)))
+
+         extra-subsets)))
+
+(sc/defn ops->permutations :- [[SessionOperation]]
   [ops :- [SessionOperation]
    {:keys [dup-level] :or {:dup-level 1}}]
-  (let [with-dups (for [n (-> dup-level inc range)]
-                    (ops->add-insert-retract ops n))
-        permutations (apply concat (for [d with-dups]
-                                     (combo/permutations d)))]
+  (let [dup-ops-seqs (ops->add-insert-retract ops dup-level)
+        permutations (apply concat
+                            (for [ops-seq dup-ops-seqs]
+                              (combo/permutations ops-seq)))]
     ;; The permutation creation allows for a retraction to occur before insertion, which
     ;; effectively removes the retraction from the seq of operations since retractions of facts
     ;; that are not present do not cause alteration of the session state.  The idea of these helpers
