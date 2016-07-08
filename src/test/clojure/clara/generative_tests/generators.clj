@@ -50,6 +50,13 @@
       false)))
 
 (defn ^:private ops->add-insert-retract
+  "Takes an operations sequence and returns a sequence of sequences of operations
+   where every possible combination of inserting and retracting each fact inserted
+  in the parent sequence up to the number of times set by dup-level.  Note that one
+  of the possibilities returned will be the original operations sequence.  This is not
+  special-cased, but a reflection of the fact that every combination of adding insert/retract pairs
+  from 0 to dup-level is in the possibilities returned.  The number of possibilities returned
+  will explode rapidly for large dup-level."
   [ops dup-level]
   (let [ops->extra (fn [ops]
                      (map (fn [op]
