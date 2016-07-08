@@ -51,10 +51,14 @@
                               "phantom-advanced" ["phantomjs"
                                                   "src/test/js/runner.js"
                                                   "src/test/html/advanced.html"]}}
+  
+  ;; Factoring out the duplication of this test selector function causes an error,
+  ;; perhaps because Leiningen is using this as uneval'ed code.
+  ;; For now just duplicate the line.
   :test-selectors {:default (complement (fn [x]
                                           (some->> x :ns ns-name str (re-matches #"^clara\.generative-tests.*"))))
-                   :generative (fn [x]
-                                 (some->> x :ns ns-name str (re-matches #"^clara\.generative-tests.*")))}
+                   :generative (fn [x] (some->> x :ns ns-name str (re-matches #"^clara\.generative-tests.*")))}
+  
   :scm {:name "git"
         :url "https://github.com/rbrush/clara-rules"}
   :pom-addition [:developers [:developer
