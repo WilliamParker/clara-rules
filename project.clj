@@ -51,6 +51,10 @@
                               "phantom-advanced" ["phantomjs"
                                                   "src/test/js/runner.js"
                                                   "src/test/html/advanced.html"]}}
+  :test-selectors {:default (complement (fn [x]
+                                          (some->> x :ns ns-name str (re-matches #"^clara\.generative-tests.*"))))
+                   :generative (fn [x]
+                                 (some->> x :ns ns-name str (re-matches #"^clara\.generative-tests.*")))}
   :scm {:name "git"
         :url "https://github.com/rbrush/clara-rules"}
   :pom-addition [:developers [:developer

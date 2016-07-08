@@ -73,8 +73,4 @@
     ;;
     ;; For now, we can just find all permutations and remove the ones with invalid ordering.
     ;; This is inefficient and there may be a more efficient algorithm or possible implementation.
-    (remove retract-before-insertion? permutations)))
-
-        
-
-                
+    (remove retract-before-insertion? permutations)))             
