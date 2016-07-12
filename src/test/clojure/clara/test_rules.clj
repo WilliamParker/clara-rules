@@ -934,9 +934,8 @@
                           (fire-rules)
                           (query get-temp-history))]
 
-    (is (= 1 (count empty-history)))
-    (is (= [{:?his (->TemperatureHistory [])}]
-            empty-history))
+    (is (empty? empty-history)
+        "An accumulate condition that creates new bindings should not propagate even with an initial value.")
 
     (is (= 1 (count temp-history)))
     (is (= [{:?his (->TemperatureHistory [temp-10-mci])}]
@@ -3931,14 +3930,12 @@
                  (fire-rules)
                  (query q1))
              (if (= "AccumulateWithJoinFilterNode" node-type)
+               ;; FIXME: This should be an empty sequence; see issue 102.
                [{:?temps [[] 10]}]
-               ;; FIXME: The correct assertion here is on equality to {:?temps [[] nil]}.
-               ;; Since (->Cold 10) is retracted we should use the initial value here.
-               ;; This is an existing defect that has been logged at https://github.com/rbrush/clara-rules/issues/188
-               [{:?temps [[] nil]}]))
+               []))
           (str "Retracting all elements that matched an accumulator with an initial value "
                \newline
-               "should cause the facts inserted to use nil as the binding for bindings on the accumulator."
+               "should cause all facts downstream from the accumulator to be retracted when the accumulator creates binding groups."
                \newline
                "Accumulator node type: " node-type)))))
 
@@ -4135,6 +4132,51 @@
         "The minimum temperature accum should only propagate once through an AccumulateWithJoinFilterNode.")
     (reset! r2-atom [])))
 
+(deftest test-accumulate-left-retract-initial-value-new-bindings-token-add-and-remove
+  (let [r1 (dsl/parse-rule [[?w <- WindSpeed (= ?loc location)]
+                            [?t <- (assoc (acc/all) :convert-return-fn (constantly []))
+                             :from [Temperature (= ?loc location) (= ?degrees temperature)]]]
+                           (insert! (->TemperatureHistory [?loc ?degrees])))
+        q (dsl/parse-query [] [[TemperatureHistory (= ?ts temperatures)]])
+        empty-session (mk-session [r1 q] :cache false)]
+
+    (is (= (-> empty-session
+               (insert (->WindSpeed 10 "MCI") (->Temperature 20 "MCI"))
+               fire-rules
+               (query q))
+           [{:?ts ["MCI" 20]}]))
+
+    (is (= (-> empty-session
+               (insert (->WindSpeed 10 "MCI") (->Temperature 20 "MCI"))
+               fire-rules
+               (retract (->WindSpeed 10 "MCI"))
+               fire-rules
+               (insert (->WindSpeed 10 "MCI"))
+               fire-rules
+               (query q))
+           [{:?ts ["MCI" 20]}])
+        "Removing a token and reinserting it should leave element history in an AccumulateNode intact.")))
+
+(deftest test-accumulate-with-bindings-from-parent
+  (let [r1 (dsl/parse-rule [[?w <- WindSpeed (= ?loc location)]
+                            [?ts <- (acc/all) :from [Temperature (= ?loc location)]]]
+                           (insert! (->TemperatureHistory [?loc (map :temperature ?ts)])))
+        q (dsl/parse-query [] [[TemperatureHistory (= ?ts temperatures)]])
+
+        empty-session (mk-session [r1 q] :cache false)]
+    
+    (is (= (-> empty-session
+               (insert (->WindSpeed 10 "MCI"))
+               fire-rules
+               (query q))
+           [{:?ts ["MCI" []]}]))
+
+    (is (= (-> empty-session
+               (insert (->WindSpeed 10 "MCI") (->Temperature 20 "MCI"))
+               fire-rules
+               (query q))
+           [{:?ts ["MCI" [20]]}]))))
+           
 (def false-initial-value-accum (acc/accum
                                 {:initial-value false
                                  ;; Propagate whichever argument is not nil.
