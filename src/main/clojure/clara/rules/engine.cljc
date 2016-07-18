@@ -826,14 +826,14 @@
     ;; Combine previously reduced items together, join to matching tokens, and emit child tokens.
     (doseq [:let [convert-return-fn (:convert-return-fn accumulator)
                   ;; Note that we want to iterate over all tokens with the desired join bindings later
-                  ;; independently of the fact binding groups created by elements; that is a, a token
+                  ;; independently of the fact binding groups created by elements; that is, a token
                   ;; can join with multiple groups of fact bindings when the accumulator condition
                   ;; creates new bindings.
                   matched-tokens (mem/get-tokens memory node join-bindings)
                   has-matches? (seq matched-tokens)]
             [bindings facts] fact-seq
             :let [previous (mem/get-accum-reduced memory node join-bindings bindings)
-                  has-previous? (not= :clara.rules.memory/no-accum-reduced previous)
+                  has-previous? (not= ::mem/no-accum-reduced previous)
                   [previous previous-reduced] (if has-previous?
                                                 previous
                                                 [:clara.rules.memory/no-accum-reduced ::not-reduced])
