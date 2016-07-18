@@ -4175,7 +4175,15 @@
                (insert (->WindSpeed 10 "MCI") (->Temperature 20 "MCI"))
                fire-rules
                (query q))
-           [{:?ts ["MCI" [20]]}]))))
+           [{:?ts ["MCI" [20]]}]))
+
+    (is (= (-> empty-session
+               (insert (->WindSpeed 10 "MCI") (->Temperature 20 "LAX"))
+               fire-rules
+               (query q))
+           [{:?ts ["MCI" []]}])
+        (str "Creation of a non-equal binding from a parent node " \newline
+             "should not allow an accumulator to fire for another binding value"))))
            
 (def false-initial-value-accum (acc/accum
                                 {:initial-value false
