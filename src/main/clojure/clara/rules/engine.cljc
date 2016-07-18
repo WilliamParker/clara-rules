@@ -799,10 +799,10 @@
                                   ;; If there is nothing under these bindings already in the memory then there is no
                                   ;; need to take further action.
                                   (not= current ::mem/no-accum-reduced)
-                                      ;; Check to see if there are elements under this binding group.
-                                      ;; If elements are present we must keep the binding group regardless of the
-                                      ;; presence or absence of tokens.
-                                      (-> current first empty?))))
+                                  ;; Check to see if there are elements under this binding group.
+                                  ;; If elements are present we must keep the binding group regardless of the
+                                  ;; presence or absence of tokens.
+                                  (-> current first empty?))))
                       (mem/remove-accum-reduced! memory node join-bindings join-bindings))]
             
             token removed-tokens
@@ -996,7 +996,7 @@
                        (empty? new-bindings))
 
               (doseq [token matched-tokens]
-                (mem/add-accum-reduced! memory node join-bindings [[] initial-converted] join-bindings)
+                (mem/add-accum-reduced! memory node join-bindings [[] initial-value] join-bindings)
                 (send-accumulated node accum-condition accumulator result-binding token initial-converted {}
                                   transport memory listener)))))
         (do
