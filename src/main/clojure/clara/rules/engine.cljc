@@ -755,12 +755,6 @@
         (and (some? initial-converted)
              (empty? new-bindings))
 
-        ;; Add it to the working memory.  There were no previous items, so use a special marker
-        ;; binding key to indicate so.  This is important so that the case of the initial value can be
-        ;; effectively retracted if elements end up matching the node later.  We do not have any
-        ;; bindings in particular to put in place here.  However, we can't use an empty map of bindings
-        ;; either because that will be ambiguous with cases where we really do have an empty binding
-        ;; map for matching elements later.
         ;; Note that this is added to memory a single time for all matching tokens because the memory
         ;; location doesn't depend on bindings from individual tokens.
         (let [accum-reduced [[] initial-value]]
