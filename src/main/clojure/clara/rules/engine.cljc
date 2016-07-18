@@ -996,11 +996,13 @@
                        (empty? new-bindings))
 
               (doseq [token matched-tokens]
+                (l/add-accum-reduced! listener node join-bindings [[] initial-value] join-bindings)
                 (mem/add-accum-reduced! memory node join-bindings [[] initial-value] join-bindings)
                 (send-accumulated node accum-condition accumulator result-binding token initial-converted {}
                                   transport memory listener)))))
         (do
           ;; Add our newly retracted information to our node.
+          (l/add-accum-reduced! listener node join-bindings [retracted retracted-reduced] bindings)
           (mem/add-accum-reduced! memory node join-bindings [retracted retracted-reduced] bindings)
 
           (cond
