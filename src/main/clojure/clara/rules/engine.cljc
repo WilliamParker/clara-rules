@@ -795,7 +795,13 @@
                   _ (when (and (empty? remaining-tokens)
                                (empty? new-bindings)
                                (let [current (mem/get-accum-reduced memory node join-bindings join-bindings)]
-                                 (and (not= current ::mem/no-accum-reduced)
+                                 (and
+                                  ;; If there is nothing under these bindings already in the memory then there is no
+                                  ;; need to take further action.
+                                  (not= current ::mem/no-accum-reduced)
+                                      ;; Check to see if there are elements under this binding group.
+                                      ;; If elements are present we must keep the binding group regardless of the
+                                      ;; presence or absence of tokens.
                                       (-> current first empty?))))
                       (mem/remove-accum-reduced! memory node join-bindings join-bindings))]
             
