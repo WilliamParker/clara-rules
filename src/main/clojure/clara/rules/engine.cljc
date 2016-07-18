@@ -795,7 +795,7 @@
                   _ (when (and (empty? remaining-tokens)
                                (empty? new-bindings)
                                (let [current (mem/get-accum-reduced memory node join-bindings join-bindings)]
-                                 (and (not= current :clara.rules.memory/no-accum-reduced)
+                                 (and (not= current ::mem/no-accum-reduced)
                                       (-> current first empty?))))
                       (mem/remove-accum-reduced! memory node join-bindings join-bindings))]
             
