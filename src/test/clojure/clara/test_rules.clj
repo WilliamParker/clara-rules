@@ -4184,6 +4184,29 @@
            [{:?ts ["MCI" []]}])
         (str "Creation of a non-equal binding from a parent node " \newline
              "should not allow an accumulator to fire for another binding value"))))
+
+(deftest test-accumulate-with-explicit-nil-binding-value
+  (let [binding-from-self (dsl/parse-rule [[?hot-facts <- (acc/all) :from [Hot (= ?t temperature)]]]
+                                          (insert! (->Temperature [?t []] "MCI")))
+        binding-from-parent (dsl/parse-rule [[Cold (= ?t temperature)]
+                                             [?hot-facts <- (acc/all) :from [Hot (= ?t temperature)]]]
+                                            (insert! (->Temperature [?t []] "MCI")))
+        
+        q (dsl/parse-query [] [[Temperature (= ?t temperature)]])]
+    
+    (is (= [{:?t [nil []]}]
+           (-> (mk-session [binding-from-self q] :cache false)
+               (insert (->Hot nil))
+               fire-rules
+               (query q)))
+        "An explicit value of nil in a field used to create a binding group should allow the binding to be created.")
+
+    (is (= [{:?t [nil []]}]
+           (-> (mk-session [binding-from-parent q] :cache false)
+               (insert (->Cold nil))
+               fire-rules
+               (query q)))
+        "An explicit value of nil from a parent should allow the binding to be created.")))
            
 (def false-initial-value-accum (acc/accum
                                 {:initial-value false
