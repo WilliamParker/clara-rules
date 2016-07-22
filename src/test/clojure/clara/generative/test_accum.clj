@@ -68,8 +68,8 @@
 
           operation-permutations (gen/ops->permutations operations {})]
       
-      (doseq [permutation operation-permutations
-              :let [session (gen/session-run-ops empty-session operations)
+      (doseq [permutation (map #(concat % [{:type :fire}]) operation-permutations)
+              :let [session (gen/session-run-ops empty-session permutation)
                     output (query session q)]]
         (is (empty? output)
             (str "Non-empty result for operation permutation: "
@@ -96,13 +96,12 @@
                      :facts [(->ColdAndWindy 20 20)]}
                     {:type :insert
                      :facts [(->ColdAndWindy 0 30)]}
-                    {:type :fire}
                     {:type :fire}]
 
         operation-permutations (gen/ops->permutations operations {})]
 
-    (doseq [permutation operation-permutations
-            :let [session (gen/session-run-ops empty-session operations)
+    (doseq [permutation (map #(concat % [{:type :fire}]) operation-permutations)
+            :let [session (gen/session-run-ops empty-session permutation)
                   output (query session cold-query)]]
       (is (= (frequencies output)
              {{:?c (->Cold 0)} 1
@@ -132,7 +131,8 @@
                               {:type :insert
                                :facts [(->Cold temp-3)]}
                               {:type :retract
-                               :facts [(->Cold temp-3)]}]]
+                               :facts [(->Cold temp-3)]}
+                              {:type :fire}]]
 
             permutation (map #(concat % [{:type :fire}])
                              (gen/ops->permutations operations {}))
