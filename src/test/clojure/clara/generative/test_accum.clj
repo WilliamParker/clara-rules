@@ -2,20 +2,16 @@
   (:require [clara.rules :refer :all]
             [clojure.test :refer :all]
             [clara.rules.testfacts :refer :all]
-            [clara.rules.engine :as eng]
-            [clara.rules.compiler :as com]
             [clara.rules.accumulators :as acc]
             [clara.rules.dsl :as dsl]
-            [clara.tools.tracing :as t]
             [schema.test]
-            [clara.generative.generators :as gen]
-            [clojure.pprint :refer [pprint]])
-  (import [clara.rules.testfacts Temperature WindSpeed Cold Hot TemperatureHistory
-           ColdAndWindy LousyWeather First Second Third Fourth FlexibleFields]))
+            [clara.generative.generators :as gen])
+  (import [clara.rules.testfacts Temperature WindSpeed Cold TemperatureHistory
+           ColdAndWindy]))
 
 (use-fixtures :once schema.test/validate-schemas)
 
-(deftest test-simple-all-condition-binding-groups-3
+(deftest test-simple-all-condition-binding-groups
   (let [r (dsl/parse-rule [[?ts <- (acc/all) :from [Temperature (= ?loc location)]]]
                           ;; The all accumulator can return facts in different orders, so we sort
                           ;; the temperatures to make asserting on the output easier.
