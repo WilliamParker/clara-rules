@@ -21,37 +21,58 @@
 
         q (dsl/parse-query [] [[?history <- TemperatureHistory]])
 
-        empty-session (mk-session [r q] :cache false)
+        empty-session (mk-session [r q] :cache false)]
 
-        operations [{:type :insert
-                     :facts [(->Temperature 11 "MCI")]}
-                    {:type :insert
-                     :facts [(->Temperature 19 "MCI")]}
-                    {:type :insert
-                     :facts [(->Temperature 1 "ORD")]}
-                    {:type :insert
-                     :facts [(->Temperature 22 "LAX")]}
-                    {:type :retract
-                     :facts [(->Temperature 22 "LAX")]}
-                    {:type :fire}]
+    (let [operations [{:type :insert
+                       :facts [(->Temperature 11 "MCI")]}
+                      {:type :insert
+                       :facts [(->Temperature 19 "MCI")]}
+                      {:type :insert
+                       :facts [(->Temperature 1 "ORD")]}
+                      {:type :insert
+                       :facts [(->Temperature 22 "LAX")]}
+                      {:type :retract
+                       :facts [(->Temperature 22 "LAX")]}
+                      {:type :fire}]
 
-        operation-permutations (gen/ops->permutations operations {})
+          operation-permutations (gen/ops->permutations operations {})
 
-        expected-output? (fn [session permutation]
-                           (let [actual-temp-hist (-> session
-                                                      (query q)
-                                                      frequencies)
-                                 expected-temp-hist (frequencies [{:?history (->TemperatureHistory ["MCI" [11 19]])}
-                                                                  {:?history (->TemperatureHistory ["ORD" [1]])}])]
-                             (= actual-temp-hist expected-temp-hist)))]
-    (doseq [permutation operation-permutations
-            :let [session (gen/session-run-ops empty-session operations)]]
-      (is (expected-output? session permutation)
-          (str "Failure for operation permutation: "
-               \newline
-               (into [] permutation)
-               \newline
-               "Output was: "
-               \newline
-               (into [] (query session q)))))))
+          expected-output? (fn [session permutation]
+                             (let [actual-temp-hist (-> session
+                                                        (query q)
+                                                        frequencies)
+                                   expected-temp-hist (frequencies [{:?history (->TemperatureHistory ["MCI" [11 19]])}
+                                                                    {:?history (->TemperatureHistory ["ORD" [1]])}])]
+                               (= actual-temp-hist expected-temp-hist)))]
+      (doseq [permutation operation-permutations
+              :let [session (gen/session-run-ops empty-session operations)]]
+        (is (expected-output? session permutation)
+            (str "Failure for operation permutation: "
+                 \newline
+                 (into [] permutation)
+                 \newline
+                 "Output was: "
+                 \newline
+                 (into [] (query session q))))))
+
+    (let [operations (mapcat (fn [fact]
+                               [{:type :insert
+                                 :facts [fact]}
+                                {:type :retract
+                                 :facts [fact]}])
+                             [(->Temperature 10 "MCI")
+                              (->Temperature 20 "MCI")
+                              (->Temperature 15 "LGA")
+                              (->Temperature 25 "LGA")])
+
+          operation-permutations (gen/ops->permutations operations {})]
+      (doseq [permutation operation-permutations
+              :let [session (gen/session-run-ops empty-session operations)
+                    output (query session q)]]
+        (is (empty? output)
+            (str "Non-empty result for operation permutation: "
+                 \newline
+                 (into [] permutation)
+                 "Output was: "
+                 (into [] output)))))))
         
