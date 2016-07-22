@@ -17,6 +17,8 @@
 
 (deftest test-simple-all-condition-binding-groups-3
   (let [r (dsl/parse-rule [[?ts <- (acc/all) :from [Temperature (= ?loc location)]]]
+                          ;; The all accumulator can return facts in different orders, so we sort
+                          ;; the temperatures to make asserting on the output easier.
                           (insert! (->TemperatureHistory [?loc (sort (map :temperature ?ts))])))
 
         q (dsl/parse-query [] [[?history <- TemperatureHistory]])
@@ -33,6 +35,10 @@
                        :facts [(->Temperature 22 "LAX")]}
                       {:type :retract
                        :facts [(->Temperature 22 "LAX")]}
+                      ;; Note that a :fire operation is added to the end later.  If this is at the end,
+                      ;; then it should be functionally the same as if we only had one at the end.
+                      ;; On the other hand, a fire operation in the middle of the operations could potentially
+                      ;; reveal bugs.
                       {:type :fire}]
 
           operation-permutations (gen/ops->permutations operations {})
@@ -45,11 +51,13 @@
                                                                     {:?history (->TemperatureHistory ["ORD" [1]])}])]
                                (= actual-temp-hist expected-temp-hist)))]
       
-      (doseq [permutation operation-permutations
-              :let [session (gen/session-run-ops empty-session operations)]]
+      (doseq [permutation (map #(concat % [{:type :fire}]) operation-permutations)
+              :let [session (gen/session-run-ops empty-session permutation)]]
         (is (expected-output? session permutation)
             (str "Failure for operation permutation: "
                  \newline
+                 ;; Put into a vector so that the str implementation shows the elements of the collection,
+                 ;; not just LazySeq.
                  (into [] permutation)
                  \newline
                  "Output was: "
@@ -139,6 +147,7 @@
 
             :let [session (gen/session-run-ops empty-session permutation)
                   output (query session temp-query)]]
+      
       (is (= output
              [{:?t (min temp-1 temp-2)}])
           (str "Did not find the correct minimum temperature for permutation: "
@@ -148,10 +157,3 @@
                "Output was: "
                \newline
                (into [] output))))))
-
-                  
-                               
-                  
-      
-               
-                  
