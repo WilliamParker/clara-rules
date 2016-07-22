@@ -66,6 +66,7 @@
                               (->Temperature 25 "LGA")])
 
           operation-permutations (gen/ops->permutations operations {})]
+      
       (doseq [permutation operation-permutations
               :let [session (gen/session-run-ops empty-session operations)
                     output (query session q)]]
