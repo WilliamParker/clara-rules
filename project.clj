@@ -24,14 +24,14 @@
   :clean-targets ^{:protect false} ["resources/public/js" "target"]
   :hooks [leiningen.cljsbuild]
   :cljsbuild {:builds [;; Simple mode compilation for tests.
-                       {:id "figwheel"
-                        :source-paths ["src/test/clojurescript" "src/test/common"]
-                        :figwheel true
-                        :compiler {:main "clara.test"
-                                   :output-to "resources/public/js/simple.js"
-                                   :output-dir "resources/public/js/out"
-                                   :asset-path "js/out"
-                                   :optimizations :none}}
+                       ;; {:id "figwheel"
+                       ;;  :source-paths ["src/test/clojurescript" "src/test/common"]
+                       ;;  :figwheel true
+                       ;;  :compiler {:main "clara.test"
+                       ;;             :output-to "resources/public/js/simple.js"
+                       ;;             :output-dir "resources/public/js/out"
+                       ;;             :asset-path "js/out"
+                       ;;             :optimizations :none}}
 
                        {:id "simple"
                         :source-paths ["src/test/clojurescript" "src/test/common"]
@@ -39,10 +39,11 @@
                                    :optimizations :whitespace}}
 
                        ;; Advanced mode compilation for tests.
-                       {:id "advanced"
-                        :source-paths ["src/test/clojurescript" "src/test/common"]
-                        :compiler {:output-to "target/js/advanced.js"
-                                   :optimizations :advanced}}]
+                       ;; {:id "advanced"
+                       ;;  :source-paths ["src/test/clojurescript" "src/test/common"]
+                       ;;  :compiler {:output-to "target/js/advanced.js"
+                       ;;             :optimizations :advanced}}
+                       ]
 
               :test-commands {"phantom-simple" ["phantomjs"
                                                 "src/test/js/runner.js"
