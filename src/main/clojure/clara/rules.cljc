@@ -330,9 +330,8 @@
       `(clara.macros/defsession ~name ~@sources-and-options)
       `(def ~name (com/mk-session ~(vec sources-and-options))))))
 
-#?(:clj
-  (defmacro defrule
-    "Defines a rule and stores it in the given var. For instance, a simple rule would look like this:
+(defmacro defrule
+  "Defines a rule and stores it in the given var. For instance, a simple rule would look like this:
 
     (defrule hvac-approval
       \"HVAC repairs need the appropriate paperwork, so insert
@@ -344,22 +343,20 @@
                 :approval
                 \"HVAC repairs must include a 27B-6 form.\")))
 
-See the [rule authoring documentation](http://www.clara-rules.org/docs/rules/) for details."
-    [name & body]
-    (if (com/compiling-cljs?)
-      `(clara.macros/defrule ~name ~@body)
-      (let [doc (if (string? (first body)) (first body) nil)
-            body (if doc (rest body) body)
-            properties (if (map? (first body)) (first body) nil)
-            definition (if properties (rest body) body)
-            {:keys [lhs rhs]} (dsl/split-lhs-rhs definition)]
-        (when-not rhs
-          (throw (ex-info (str "Invalid rule " name ". No RHS (missing =>?).")
-                          {})))
-        `(def ~(vary-meta name assoc :rule true :doc doc)
-           (cond-> ~(dsl/parse-rule* lhs rhs properties {} (meta &form))
-             ~name (assoc :name ~(str (clojure.core/name (ns-name *ns*)) "/" (clojure.core/name name)))
-             ~doc (assoc :doc ~doc)))))))
+  See the [rule authoring documentation](http://www.clara-rules.org/docs/rules/) for details."
+  [name & body]
+  (let [doc (if (string? (first body)) (first body) nil)
+        body (if doc (rest body) body)
+        properties (if (map? (first body)) (first body) nil)
+        definition (if properties (rest body) body)
+        {:keys [lhs rhs]} (dsl/split-lhs-rhs definition)]
+    (when-not rhs
+      (throw (ex-info (str "Invalid rule " name ". No RHS (missing =>?).")
+                      {})))
+    `(def ~(vary-meta name assoc :rule true :doc doc)
+       (cond-> ~(dsl/parse-rule* lhs rhs properties {} (meta &form))
+         ~name (assoc :name ~(str (clojure.core/name (ns-name *ns*)) "/" (clojure.core/name name)))
+         ~doc (assoc :doc ~doc)))))
 
 #?(:clj
   (defmacro defquery
