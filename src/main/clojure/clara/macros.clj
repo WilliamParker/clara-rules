@@ -17,31 +17,6 @@
             [clara.rules.schema :as schema]
             [clojure.set :as s]))
 
-(defmacro defrule
-  [name & body]
-  (let [doc (if (string? (first body)) (first body) nil)
-        body (if doc (rest body) body)
-        properties (if (map? (first body)) (first body) nil)
-        definition (if properties (rest body) body)
-        {:keys [lhs rhs]} (dsl/split-lhs-rhs definition)
-
-        production (cond-> (dsl/parse-rule* lhs rhs properties {})
-                           name (assoc :name (str (clojure.core/name (com/cljs-ns)) "/" (clojure.core/name name)))
-                           doc (assoc :doc doc))]
-    `(def ~(vary-meta name assoc :rule true)
-       ~production)))
-
-(defmacro defquery
-  [name & body]
-  (let [doc (if (string? (first body)) (first body) nil)
-        binding (if doc (second body) (first body))
-        definition (if doc (drop 2 body) (rest body) )
-
-        query (cond-> (dsl/parse-query* binding definition {})
-                      name (assoc :name (str (clojure.core/name (com/cljs-ns)) "/" (clojure.core/name name)))
-                      doc (assoc :doc doc))]
-    `(def ~(vary-meta name assoc :rule true)
-       ~query)))
 
 (sc/defn gen-beta-network :- [sc/Any] ; Returns a sequence of compiled nodes.
   "Generates the beta network from the beta tree. "
