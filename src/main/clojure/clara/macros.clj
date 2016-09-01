@@ -17,17 +17,6 @@
             [clara.rules.schema :as schema]
             [clojure.set :as s]))
 
-(defn get-productions-from-namespace [source]
-  (com/load-rules source))
-
-(defn- get-productions
-  "Return the productions from the source"
-  [source]
-  (cond
-   (symbol? source) (get-productions-from-namespace source)
-   (coll? source) (seq source)
-   :else (throw (IllegalArgumentException. "Unknown source value type passed to defsession"))))
-
 (defmacro defrule
   [name & body]
   (let [doc (if (string? (first body)) (first body) nil)
@@ -223,9 +212,9 @@ use it as follows:
         ;; Eval to unquote ns symbols, and to eval exprs to look up
         ;; explicit rule sources
         sources (eval (vec sources))
-        productions (vec (for [source sources
-                               production (get-productions source)]
-                           production))
+        productions (vec (mapcat #(if (satisfies? com/IRuleSource %)
+                                    (com/load-rules %)
+                                    %)))
 
         beta-graph (com/to-beta-graph productions)
         ;; Compile the children of the logical root condition.
