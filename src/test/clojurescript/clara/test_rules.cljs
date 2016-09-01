@@ -64,6 +64,8 @@
   =>
   (throw (ex-info "Bad temperature!" {:temp ?t})))
 
+(println (meta #'throw-on-bad-temp))
+
 (defquery find-cold-and-windy
     []
     [?fact <- ColdAndWindy])

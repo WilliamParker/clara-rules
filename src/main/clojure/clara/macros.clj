@@ -17,17 +17,8 @@
             [clara.rules.schema :as schema]
             [clojure.set :as s]))
 
-
-;; Store production in cljs.env/*compiler* under ::productions seq?
-(defn- add-production [name production]
-  (swap! env/*compiler* assoc-in [::productions (com/cljs-ns) name] production))
-
-(defn- get-productions-from-namespace
-  "Returns a map of names to productions in the given namespace."
-  [namespace]
-  ;; TODO: remove need for ugly eval by changing our quoting strategy.
-  (let [productions (get-in @env/*compiler* [::productions namespace])]
-    (map eval (vals productions))))
+(defn get-productions-from-namespace [source]
+  (com/load-rules source))
 
 (defn- get-productions
   "Return the productions from the source"
@@ -48,8 +39,7 @@
         production (cond-> (dsl/parse-rule* lhs rhs properties {})
                            name (assoc :name (str (clojure.core/name (com/cljs-ns)) "/" (clojure.core/name name)))
                            doc (assoc :doc doc))]
-    (add-production name production)
-    `(def ~name
+    `(def ~(vary-meta name assoc :rule true)
        ~production)))
 
 (defmacro defquery
@@ -61,8 +51,7 @@
         query (cond-> (dsl/parse-query* binding definition {})
                       name (assoc :name (str (clojure.core/name (com/cljs-ns)) "/" (clojure.core/name name)))
                       doc (assoc :doc doc))]
-    (add-production name query)
-    `(def ~name
+    `(def ~(vary-meta name assoc :rule true)
        ~query)))
 
 (sc/defn gen-beta-network :- [sc/Any] ; Returns a sequence of compiled nodes.
