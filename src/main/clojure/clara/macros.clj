@@ -18,53 +18,6 @@
             [clojure.set :as s]))
 
 
-;; Store production in cljs.env/*compiler* under ::productions seq?
-(defn- add-production [name production]
-  (swap! env/*compiler* assoc-in [::productions (com/cljs-ns) name] production))
-
-(defn- get-productions-from-namespace
-  "Returns a map of names to productions in the given namespace."
-  [namespace]
-  ;; TODO: remove need for ugly eval by changing our quoting strategy.
-  (let [productions (get-in @env/*compiler* [::productions namespace])]
-    (map eval (vals productions))))
-
-(defn- get-productions
-  "Return the productions from the source"
-  [source]
-  (cond
-   (symbol? source) (get-productions-from-namespace source)
-   (coll? source) (seq source)
-   :else (throw (IllegalArgumentException. "Unknown source value type passed to defsession"))))
-
-(defmacro defrule
-  [name & body]
-  (let [doc (if (string? (first body)) (first body) nil)
-        body (if doc (rest body) body)
-        properties (if (map? (first body)) (first body) nil)
-        definition (if properties (rest body) body)
-        {:keys [lhs rhs]} (dsl/split-lhs-rhs definition)
-
-        production (cond-> (dsl/parse-rule* lhs rhs properties {})
-                           name (assoc :name (str (clojure.core/name (com/cljs-ns)) "/" (clojure.core/name name)))
-                           doc (assoc :doc doc))]
-    (add-production name production)
-    `(def ~name
-       ~production)))
-
-(defmacro defquery
-  [name & body]
-  (let [doc (if (string? (first body)) (first body) nil)
-        binding (if doc (second body) (first body))
-        definition (if doc (drop 2 body) (rest body) )
-
-        query (cond-> (dsl/parse-query* binding definition {})
-                      name (assoc :name (str (clojure.core/name (com/cljs-ns)) "/" (clojure.core/name name)))
-                      doc (assoc :doc doc))]
-    (add-production name query)
-    `(def ~name
-       ~query)))
-
 (sc/defn gen-beta-network :- [sc/Any] ; Returns a sequence of compiled nodes.
   "Generates the beta network from the beta tree. "
   ([node-ids :- #{sc/Int}              ; Nodes to compile.
@@ -234,9 +187,11 @@ use it as follows:
         ;; Eval to unquote ns symbols, and to eval exprs to look up
         ;; explicit rule sources
         sources (eval (vec sources))
-        productions (vec (for [source sources
-                               production (get-productions source)]
-                           production))
+        productions (into []
+                          (mapcat #(if (satisfies? com/IRuleSource %)
+                                     (com/load-rules %)
+                                     %))
+                          sources)
 
         beta-graph (com/to-beta-graph productions)
         ;; Compile the children of the logical root condition.

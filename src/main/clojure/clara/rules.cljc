@@ -330,9 +330,8 @@
       `(clara.macros/defsession ~name ~@sources-and-options)
       `(def ~name (com/mk-session ~(vec sources-and-options))))))
 
-#?(:clj
-  (defmacro defrule
-    "Defines a rule and stores it in the given var. For instance, a simple rule would look like this:
+(defmacro defrule
+  "Defines a rule and stores it in the given var. For instance, a simple rule would look like this:
 
     (defrule hvac-approval
       \"HVAC repairs need the appropriate paperwork, so insert
@@ -344,41 +343,36 @@
                 :approval
                 \"HVAC repairs must include a 27B-6 form.\")))
 
-See the [rule authoring documentation](http://www.clara-rules.org/docs/rules/) for details."
-    [name & body]
-    (if (com/compiling-cljs?)
-      `(clara.macros/defrule ~name ~@body)
-      (let [doc (if (string? (first body)) (first body) nil)
-            body (if doc (rest body) body)
-            properties (if (map? (first body)) (first body) nil)
-            definition (if properties (rest body) body)
-            {:keys [lhs rhs]} (dsl/split-lhs-rhs definition)]
-        (when-not rhs
-          (throw (ex-info (str "Invalid rule " name ". No RHS (missing =>?).")
-                          {})))
-        `(def ~(vary-meta name assoc :rule true :doc doc)
-           (cond-> ~(dsl/parse-rule* lhs rhs properties {} (meta &form))
-             ~name (assoc :name ~(str (clojure.core/name (ns-name *ns*)) "/" (clojure.core/name name)))
-             ~doc (assoc :doc ~doc)))))))
+  See the [rule authoring documentation](http://www.clara-rules.org/docs/rules/) for details."
+  [name & body]
+  (let [doc (if (string? (first body)) (first body) nil)
+        body (if doc (rest body) body)
+        properties (if (map? (first body)) (first body) nil)
+        definition (if properties (rest body) body)
+        {:keys [lhs rhs]} (dsl/split-lhs-rhs definition)]
+    (when-not rhs
+      (throw (ex-info (str "Invalid rule " name ". No RHS (missing =>?).")
+                      {})))
+    `(def ~(vary-meta name assoc :rule true :doc doc)
+       (cond-> ~(dsl/parse-rule* lhs rhs properties {} (meta &form))
+         ~name (assoc :name ~(str (clojure.core/name (ns-name *ns*)) "/" (clojure.core/name name)))
+         ~doc (assoc :doc ~doc)))))
 
-#?(:clj
-  (defmacro defquery
-    "Defines a query and stored it in the given var. For instance, a simple query that accepts no
-parameters would look like this:
+(defmacro defquery
+  "Defines a query and stored it in the given var. For instance, a simple query that accepts no
+  parameters would look like this:
 
     (defquery check-job
       \"Checks the job for validation errors.\"
       []
       [?issue <- ValidationError])
 
-See the [query authoring documentation](http://www.clara-rules.org/docs/queries/) for details."
-    [name & body]
-    (if (com/compiling-cljs?)
-      `(clara.macros/defquery ~name ~@body)
-      (let [doc (if (string? (first body)) (first body) nil)
-            binding (if doc (second body) (first body))
-            definition (if doc (drop 2 body) (rest body) )]
-        `(def ~(vary-meta name assoc :query true :doc doc)
-           (cond-> ~(dsl/parse-query* binding definition {} (meta &form))
-             ~name (assoc :name ~(str (clojure.core/name (ns-name *ns*)) "/" (clojure.core/name name)))
-             ~doc (assoc :doc ~doc)))))))
+  See the [query authoring documentation](http://www.clara-rules.org/docs/queries/) for details."
+  [name & body]
+  (let [doc (if (string? (first body)) (first body) nil)
+        binding (if doc (second body) (first body))
+        definition (if doc (drop 2 body) (rest body) )]
+    `(def ~(vary-meta name assoc :query true :doc doc)
+       (cond-> ~(dsl/parse-query* binding definition {} (meta &form))
+         ~name (assoc :name ~(str (clojure.core/name (ns-name *ns*)) "/" (clojure.core/name name)))
+         ~doc (assoc :doc ~doc)))))
