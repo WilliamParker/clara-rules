@@ -150,6 +150,8 @@
 ;; Active session during rule execution.
 (def ^:dynamic *current-session* nil)
 
+(def ^:dynamic *pending-external-retracts* nil)
+
 ;; The token that triggered a rule to fire.
 (def ^:dynamic *rule-context* nil)
 
@@ -282,7 +284,9 @@
       (when-let [insertions (seq (apply concat (vals token-insertion-map)))]
         ;; If there is current session with rules firing, add these items to the queue
         ;; to be retracted so they occur in the same order as facts being inserted.
-        (if *current-session*
+        (cond
+
+          *current-session*
           ;; Retract facts that have become untrue, unless they became untrue
           ;; because of an activation of the current rule that is :no-loop
           (when (or (not (get-in production [:props :no-loop]))
@@ -293,6 +297,10 @@
                 (l/retract-facts-logical! listener node token token-insertions))
               (retract-facts! insertions)))
 
+          *pending-external-retracts*
+          (swap! *pending-external-retracts* into insertions)
+
+          :else
           ;; The retraction is occuring outside of a rule-firing phase,
           ;; so simply retract them as an external caller would.
           (let [get-alphas-fn (mem/get-alphas-fn memory)]
@@ -306,6 +314,17 @@
   (get-join-keys [node] [])
 
   (description [node] "ProductionNode"))
+
+(defn external-retract-loop
+  [get-alphas-fn memory transport listener]
+  (loop [_ true]
+    (let [retractions (deref *pending-external-retracts*)
+          _ (reset! *pending-external-retracts* [])]
+      (doseq [[alpha-roots fact-group] (get-alphas-fn retractions)
+              root alpha-roots]
+        (alpha-retract root fact-group memory transport listener))
+      (when (-> *pending-external-retracts* deref not-empty)
+        (recur true)))))
 
 ;; The QueryNode is a terminal node that stores the
 ;; state that can be queried by a rule user.
@@ -1487,6 +1506,8 @@
           (recur (mem/next-activation-group transient-memory) next-group))))))
 
 
+
+
 (deftype LocalSession [rulebase memory transport listener get-alphas-fn]
   ISession
   (insert [session facts]
@@ -1512,9 +1533,12 @@
 
       (l/retract-facts! transient-listener facts)
 
-      (doseq [[alpha-roots fact-group] (get-alphas-fn facts)
-              root alpha-roots]
-        (alpha-retract root fact-group transient-memory transport transient-listener))
+      (binding [*pending-external-retracts* (atom facts)]
+        (external-retract-loop get-alphas-fn transient-memory transport transient-listener))
+
+      ;; (doseq [[alpha-roots fact-group] (get-alphas-fn facts)
+      ;;         root alpha-roots]
+      ;;   (alpha-retract root fact-group transient-memory transport transient-listener))
 
       (LocalSession. rulebase
                      (mem/to-persistent! transient-memory)
