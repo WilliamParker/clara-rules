@@ -4965,3 +4965,28 @@
           (str "As long as one negation condition in the :or matches, regardless of how many facts match the other "
                "negation the rule should fire for join type " join-type)))))
 
+(deftest test-after-replacement
+  (let [cold-rule (dsl/parse-rule [[ColdAndWindy (= ?t temperature)
+                                    (= ?w windspeed)]]
+                                  (insert! (->Cold ?t)))
+        cold-query (dsl/parse-query [] [[Cold (= ?t temperature)]])
+
+        empty-session (mk-session [cold-rule cold-query] :cache false)]
+
+    (is (= (-> empty-session
+               (insert (->ColdAndWindy 10 15))
+               fire-rules
+               (clara.rules.engine/replace-facts [(->ColdAndWindy 10 20)]
+                                                 [(->ColdAndWindy 10 15)])
+               (query cold-query))
+           [{:?t 10}])
+        "No real change")
+
+    (is (= (-> empty-session
+               (insert (->ColdAndWindy 10 15))
+               fire-rules
+               (clara.rules.engine/replace-facts [(->ColdAndWindy 15 20)]
+                                                 [(->ColdAndWindy 10 15)])
+               (query cold-query))
+           [{:?t 15}])
+        "real change")))

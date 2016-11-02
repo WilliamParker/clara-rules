@@ -8,6 +8,8 @@
             [clara.rules.listener :as l]
             [clara.rules.platform :as platform]))
 
+(def ^:dynamic *replacement-retracts* nil)
+
 ;; The accumulator is a Rete extension to run an accumulation (such as sum, average, or similar operation)
 ;; over a collection of values passing through the Rete network. This object defines the behavior
 ;; of an accumulator. See the AccumulateNode for the actual node implementation in the network.
@@ -64,6 +66,8 @@
 
   ;; Runs a query agains thte session.
   (query [session query params])
+
+  (replace-facts [session insertions retractions])
 
   ;; Returns the components of a session as defined in the session-components-schema
   (components [session]))
@@ -333,6 +337,12 @@
             (doseq [[token token-insertions] token-insertion-map]
               (l/retract-facts-logical! listener node token token-insertions))
             (swap! *pending-external-retractions* into insertions))
+
+          *replacement-retracts*
+          (do
+            (doseq [[token token-insertions] token-insertion-map]
+              (l/retract-facts-logical! listener node token token-insertions))
+            (swap! *replacement-retracts* into insertions))
 
           :else
           (throw (ex-info (str "Attempting to retract from a ProductionNode when neither *current-session* nor "
@@ -1451,13 +1461,13 @@
 
 (defn fire-rules*
   "Fire rules for the given nodes."
-  [rulebase nodes transient-memory transport listener get-alphas-fn]
+  [rulebase nodes transient-memory transport listener get-alphas-fn initial-insertions]
   (binding [*current-session* {:rulebase rulebase
                                :transient-memory transient-memory
                                :transport transport
                                :insertions (atom 0)
                                :get-alphas-fn get-alphas-fn
-                               :pending-updates (atom [])
+                               :pending-updates (atom (into [] initial-insertions))
                                :listener listener}]
 
     (loop [next-group (mem/next-activation-group transient-memory)
@@ -1544,6 +1554,11 @@
         (when (flush-updates *current-session*)
           (recur (mem/next-activation-group transient-memory) next-group))))))
 
+(deftype LogicalInsertionByFact [fact token]
+  Object
+  (equals [this other]
+    (= fact other)))
+(declare replace-facts-impl)
 (deftype LocalSession [rulebase memory transport listener get-alphas-fn]
   ISession
   (insert [session facts]
@@ -1584,6 +1599,61 @@
                      (l/to-persistent! transient-listener)
                      get-alphas-fn)))
 
+  (replace-facts [session insertions retractions]
+    (replace-facts-impl rulebase memory transport listener get-alphas-fn insertions retractions)
+    ;; (let [transient-memory (mem/to-transient memory)
+    ;;       transient-listener (l/to-transient listener)]
+    ;;   (binding [*replacement-retracts* (atom [])]
+    ;;     (doseq [[alpha-roots fact-group] (get-alphas-fn retractions)
+    ;;             root alpha-roots]
+    ;;       (alpha-retract root fact-group transient-memory transport listener))
+    ;;     (let [activations (loop [popped (transient [])]
+    ;;                         (let [new (mem/pop-activation! transient-memory)]
+    ;;                           (if-not new
+    ;;                             (persistent! popped)
+    ;;                             (recur (conj! popped new)))))
+    ;;           batched-unconditional-insertions (atom [])
+    ;;           batched-rhs-retractions (atom [])
+    ;;           logical-insertions (java.util.LinkedList.)]
+    ;;       (doseq [{:keys [node token]} activations
+    ;;               :let [batched-logical-insertions (atom [])]]
+    ;;         (binding [*rule-context* {:token token
+    ;;                                   :node node
+    ;;                                   :batched-logical-insertions batched-logical-insertions
+    ;;                                   ;; Ignore batched-unconditional-insertions and batched-rhs-retractions
+    ;;                                   ;; for now since the rules I want to test don't use them.  Obviously we'd need
+    ;;                                   ;; a way to handle them.
+    ;;                                   :batched-unconditional-insertions batched-unconditional-insertions
+    ;;                                   :batched-rhs-retractions batched-rhs-retractions}]
+    ;;           ((:rhs node) token (:env (:production node)))
+    ;;           (mem/add-insertions! transient-memory node token @batched-logical-insertions)
+    ;;           (doseq [i batched-logical-insertions]
+    ;;             (.add ^java.util.List logical-insertions i))))
+    ;;       (let [retractions (java.util.LinkedList. @*replacement-retracts*)
+    ;;             #break remaining-insertions (@#'mem/remove-first-of-each! logical-insertions @*replacement-retracts*)
+    ;;             #break remaining-retractions (@#'mem/remove-first-of-each! retractions logical-insertions)]
+    ;;         (binding [*pending-external-retractions* (atom remaining-retractions)]
+    ;;           (external-retract-loop get-alphas-fn transient-memory transport transient-listener))
+    ;;         ;; Send remaining logical insertions downstream.
+    ;;         (doseq [[alpha-roots fact-group] (get-alphas-fn remaining-insertions)
+    ;;                 root alpha-roots]
+    ;;           (alpha-activate root fact-group transient-memory transport transient-listener))
+            
+    ;;         (fire-rules* rulebase
+    ;;                      (:production-nodes rulebase)
+    ;;                      transient-memory
+    ;;                      transport
+    ;;                      transient-listener
+    ;;                      get-alphas-fn
+    ;;                      [])
+    ;;         (LocalSession. rulebase
+    ;;                        (mem/to-persistent! transient-memory)
+    ;;                        transport
+    ;;                        (l/to-persistent! transient-listener)
+    ;;                        get-alphas-fn)))))
+
+    )
+
   (fire-rules [session]
 
     (let [transient-memory (mem/to-transient memory)
@@ -1593,7 +1663,8 @@
                    transient-memory
                    transport
                    transient-listener
-                   get-alphas-fn)
+                   get-alphas-fn
+                   [])
 
       (LocalSession. rulebase
                      (mem/to-persistent! transient-memory)
@@ -1627,6 +1698,68 @@
                   []
                   (l/get-children listener))
      :get-alphas-fn get-alphas-fn}))
+
+
+(defn replace-facts-impl [rulebase memory transport listener get-alphas-fn insertions retractions]
+
+  (let [transient-memory (mem/to-transient memory)
+        transient-listener (l/to-transient listener)]
+    (binding [*replacement-retracts* (atom [])]
+      (doseq [[alpha-roots fact-group] (get-alphas-fn retractions)
+              root alpha-roots]
+        (alpha-retract root fact-group transient-memory transport listener))
+      (doseq [[alpha-roots fact-group] (get-alphas-fn insertions)
+              root alpha-roots]
+        (alpha-activate root fact-group transient-memory transport transient-listener))
+      (let [activations (loop [popped (transient [])]
+                          (let [new (mem/pop-activation! transient-memory)]
+                            (if-not new
+                              (persistent! popped)
+                              (recur (conj! popped new)))))
+            resulting-insertions (java.util.LinkedList.)]
+        (doseq [{:keys [node token]} activations
+                :let [batched-logical-insertions (atom [])
+                      batched-unconditional-insertions (atom [])
+                      batched-rhs-retractions (atom [])]]
+          (binding [*rule-context* {:token token
+                                    :node node
+                                    :batched-logical-insertions batched-logical-insertions
+                                    :batched-unconditional-insertions batched-unconditional-insertions
+                                    :batched-rhs-retractions batched-rhs-retractions}]
+            ((:rhs node) token (:env (:production node)))
+            (mem/add-insertions! transient-memory node token @batched-logical-insertions)
+            (when (seq @batched-rhs-retractions)
+              (swap! *replacement-retracts* into @batched-rhs-retractions))
+            (doseq [i @batched-logical-insertions]
+              (.add ^java.util.List resulting-insertions i))
+            (doseq [i @batched-unconditional-insertions]
+              (.add ^java.util.List resulting-insertions i))))
+        (let [original-retractions (into []  @*replacement-retracts*)
+              original-insertions (into [] resulting-insertions)
+              retractions (java.util.LinkedList. original-retractions)
+              ;; Note: ignoring the subleties around ordering of insertion and retraction operations
+              ;; here in this first pass.
+              _ (@#'mem/remove-first-of-each! original-retractions resulting-insertions)
+              _ (@#'mem/remove-first-of-each! original-insertions retractions)]
+          (binding [*pending-external-retractions* (atom retractions)]
+            (external-retract-loop get-alphas-fn transient-memory transport transient-listener))
+          ;; Send remaining logical insertions downstream.
+          (doseq [[alpha-roots fact-group] (get-alphas-fn resulting-insertions)
+                  root alpha-roots]
+            (alpha-activate root fact-group transient-memory transport transient-listener))
+          
+          (fire-rules* rulebase
+                       (:production-nodes rulebase)
+                       transient-memory
+                       transport
+                       transient-listener
+                       get-alphas-fn
+                       [])
+          (LocalSession. rulebase
+                         (mem/to-persistent! transient-memory)
+                         transport
+                         (l/to-persistent! transient-listener)
+                         get-alphas-fn))))))
 
 (defn assemble
   "Assembles a session from the given components, which must be a map
