@@ -510,6 +510,11 @@
   d/ISessionSerializer
   (serialize [_ session opts]
     (let [{:keys [rulebase memory]} (eng/components session)
+          rulebase (assoc rulebase
+                          :ancestors-fn nil
+                          :activation-group-sort-fn nil
+                          :activation-group-fn nil
+                          :get-alphas-fn nil)
           record-holder (IdentityHashMap.)
           do-serialize
           (fn [sources]
@@ -541,11 +546,21 @@
             record-holder (ArrayList.)
             ;; The rulebase should either be given from the base-session or found in
             ;; the restored session-state.
-            rulebase (or (and (not rulebase-only?) base-rulebase)
-                         (binding [d/*node-id->node-cache* (volatile! {})
-                                   d/*clj-record-holder* record-holder
-                                   d/*compile-expr-fn* (memoize (fn [id expr] (com/try-eval expr)))]
-                           (fres/read-object rdr)))]
+            maybe-base-rulebase (when (and (not rulebase-only?) base-rulebase)
+                                  base-rulebase)
+
+            rulebase (if maybe-base-rulebase
+                       maybe-base-rulebase
+                       (let [without-ops-rulebase (binding [d/*node-id->node-cache* (volatile! {})
+                                                            d/*clj-record-holder* record-holder
+                                                            d/*compile-expr-fn* (memoize (fn [id expr] (com/try-eval expr)))]
+                                                    (fres/read-object rdr))]
+                         (assoc without-ops-rulebase
+                                :activation-group-sort-fn (eng/options->activation-group-sort-fn opts)
+                                :activation-group-fn (eng/options->activation-group-fn opts)
+                                :ancestors-fn (or (:ancestors-fn opts)
+                                                  ancestors)
+                                :get-alphas-fn (d/opts->get-alphas-fn without-ops-rulebase opts))))]
 
         (if rulebase-only?
           rulebase

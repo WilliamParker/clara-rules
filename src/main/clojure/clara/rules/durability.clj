@@ -392,23 +392,24 @@
     (-> memory
         index-memory
         (update :memory
-                dissoc
+                ;; Assoc nil values rather than using dissoc in order to preserve the type of the memory.
+                assoc
                 ;; The rulebase does need to be stored per memory.  It will be restored during deserialization.
-                :rulebase
+                :rulebase nil
                 ;; Currently these do not support serialization and must be provided during deserialization via a
                 ;; base-session or they default to the standard defaults.
-                :activation-group-sort-fn
-                :activation-group-fn
-                :alphas-fn))))
+                :activation-group-sort-fn nil
+                :activation-group-fn nil
+                :alphas-fn nil))))
 
 (def ^:private create-get-alphas-fn @#'com/create-get-alphas-fn)
 
-(defn- opts->get-alphas-fn [rulebase opts]
+(defn opts->get-alphas-fn [rulebase opts]
   (let [fact-type-fn (:fact-type-fn opts type)
         ancestors-fn (:ancestors-fn opts ancestors)]
     (create-get-alphas-fn fact-type-fn
                           ancestors-fn
-                          rulebase)))
+                          (:alpha-roots rulebase))))
 
 (defn assemble-restored-session
   "Builds a Clara session from the given rulebase and memory components.  When no memory is given a new 
@@ -440,45 +441,27 @@
      (eng/assemble {:rulebase rulebase
                     :memory (eng/local-memory rulebase
                                               (clara.rules.engine.LocalTransport.)
-                                              (eng/options->activation-group-sort-fn opts)
-                                              (eng/options->activation-group-fn opts)
+                                              (:activation-group-sort-fn rulebase)
+                                              (:activation-group-fn rulebase)
                                               ;; TODO: Memory doesn't seem to ever need this or use
                                               ;; it.  Can we just remove it from memory?
-                                              get-alphas-fn)
+                                              (:get-alphas-fn rulebase))
                     :transport (or transport (clara.rules.engine.LocalTransport.))
                     :listeners (or listeners [])
-                    :get-alphas-fn get-alphas-fn})))
+                    :get-alphas-fn (:get-alphas-fn rulebase)})))
 
   ([rulebase memory opts]
-   (let [opts (-> opts
-                  (assoc :rulebase
-                         rulebase
-                         ;; Right now get alphas fn does not serialize.
-                         :get-alphas-fn
-                         (opts->get-alphas-fn rulebase opts))
-                  ;; Right now activation fns do not serialize.
-                  (update :activation-group-sort-fn
-                          #(eng/options->activation-group-sort-fn {:activation-group-sort-fn %}))
-                  (update :activation-group-fn
-                          #(eng/options->activation-group-fn {:activation-group-fn %})))
-
-         {:keys [listeners transport get-alphas-fn]} opts
-         
-         memory-opts (select-keys opts
-                                  #{:rulebase
-                                    :activation-group-sort-fn
-                                    :activation-group-fn
-                                    :get-alphas-fn})]
+   (let [{:keys [listeners transport]} opts]
      
      (eng/assemble {:rulebase rulebase
-                    :memory (-> memory
-                                (merge memory-opts)
-                                ;; Naming difference for some reason.
-                                (set/rename-keys {:get-alphas-fn :alphas-fn})
-                                mem/map->PersistentLocalMemory)
+                    :memory (assoc memory
+                                   :rulebase rulebase
+                                   :activation-group-sort-fn (:activation-group-sort-fn rulebase)
+                                   :activation-group-fn (:activation-group-fn rulebase)
+                                   :alphas-fn (:get-alphas-fn rulebase))
                     :transport (or transport (clara.rules.engine.LocalTransport.))
                     :listeners (or listeners [])
-                    :get-alphas-fn get-alphas-fn}))))
+                    :get-alphas-fn (:get-alphas-fn rulebase)}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Serialization protocols.
