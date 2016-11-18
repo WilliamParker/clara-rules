@@ -1492,11 +1492,7 @@
   returns a map associating alpha nodes with the facts they accept."
   [fact-type-fn ancestors-fn alpha-roots]
 
-  ;; We preserve a map of fact types to alpha nodes for efficiency,
-  ;; effectively memoizing this operation.
-  (let [alpha-map (atom {})
-
-        ;; If a customized fact-type-fn is provided,
+  (let [;; If a customized fact-type-fn is provided,
         ;; we must use a specialized grouping function
         ;; that handles internal control types that may not
         ;; follow the provided type function.
@@ -1507,32 +1503,26 @@
                                ;; Internal system types always use Clojure's type mechanism.
                                (type fact)
                                ;; All other types defer to the provided function.
-                               (fact-type-fn fact))))]
+                               (fact-type-fn fact))))
+
+        type->type-with-ancestors (memoize
+                                   (fn [fact-type]
+                                     (conj (ancestors-fn fact-type) fact-type)))
+
+        insert-or-add (fn [^java.util.Map match-map fact-type facts]
+                        (if-let [v (.get match-map fact-type)]
+                          (.addAll ^java.util.List (second v) facts)
+                          (.put match-map fact-type
+                                [(get alpha-roots fact-type) (java.util.LinkedList. facts)])))]
 
     (fn [facts]
-      (for [[fact-type facts] (platform/group-by-seq fact-grouping-fn facts)]
-
-        (if-let [alpha-nodes (get @alpha-map fact-type)]
-
-          ;; If the matching alpha nodes are cached, simply return them.
-          [alpha-nodes facts]
-
-          ;; The alpha nodes weren't cached for the type, so get them now.
-          (let [ancestors (conj (ancestors-fn fact-type) fact-type)
-
-                ;; Get all alpha nodes for all ancestors.  Keep them sorted to maintain
-                ;; deterministic ordering of fact propagation across the network.
-                ;; Alpha nodes do not have a :node-id of their own right now, so sort
-                ;; by the :node-id of their :children.
-                new-nodes (sort-by #(mapv :node-id (:children %))
-                                   (into []
-                                         (comp (map #(get alpha-roots %))
-                                               cat
-                                               (distinct))
-                                         ancestors))]
-
-            (swap! alpha-map assoc fact-type new-nodes)
-            [new-nodes facts]))))))
+      (let [^java.util.Map type->nodes-facts (java.util.LinkedHashMap.)]
+        
+        (doseq [[fact-type facts] (platform/group-by-seq fact-grouping-fn facts)
+                fact-subtype (type->type-with-ancestors fact-type)]
+          (insert-or-add type->nodes-facts fact-subtype facts))
+        (.values type->nodes-facts)
+        ))))
 
 (sc/defn build-network
   "Constructs the network from compiled beta tree and condition functions."
