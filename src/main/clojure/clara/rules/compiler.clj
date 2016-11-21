@@ -1487,16 +1487,23 @@
         env (assoc :env env))
       {:alpha-expr alpha-expr})))
 
+;; Wrap the fact-type so that Clojure equality and hashcode semantics are used
+;; even though it is placed in a Java map.
+(deftype FactTypeWrapper [fact-type]
+  Object
+  (equals [this other]
+    ;; We expect that this should only ever be tested for equality with other
+    ;; FactTypeWrapper instances.
+    (= fact-type (.fact_type ^FactTypeWrapper other)))
+  (hashCode [this]
+    (hash fact-type)))
+
 (defn- create-get-alphas-fn
   "Returns a function that given a sequence of facts,
   returns a map associating alpha nodes with the facts they accept."
   [fact-type-fn ancestors-fn alpha-roots]
 
-  ;; We preserve a map of fact types to alpha nodes for efficiency,
-  ;; effectively memoizing this operation.
-  (let [alpha-map (atom {})
-
-        ;; If a customized fact-type-fn is provided,
+  (let [;; If a customized fact-type-fn is provided,
         ;; we must use a specialized grouping function
         ;; that handles internal control types that may not
         ;; follow the provided type function.
@@ -1507,32 +1514,42 @@
                                ;; Internal system types always use Clojure's type mechanism.
                                (type fact)
                                ;; All other types defer to the provided function.
-                               (fact-type-fn fact))))]
+                               (fact-type-fn fact))))
+
+        type->type-with-ancestors (memoize
+                                   (fn [fact-type]
+                                     (into #{}
+                                           ;; If a given type in the ancestors has no matching alpha roots,
+                                           ;; don't return it as an ancestors.  Since this helper function is memoized,
+                                           ;; but the later runtime dispatch on the types isn't, this will reduce the work
+                                           ;; needed later.
+                                           (filter #(not-empty (get alpha-roots %)))
+                                           (conj (ancestors-fn fact-type) fact-type))))
+
+        insert-or-add (fn [^java.util.Map match-map fact-type fact]
+                        (if-let [v (.get match-map (FactTypeWrapper. fact-type))]
+                          (.add ^java.util.List (second v) fact)
+                          (.put match-map (FactTypeWrapper. fact-type)
+                                [(get alpha-roots fact-type)
+                                 (doto ^java.util.List (java.util.LinkedList.)
+                                   (.add fact))])))]
 
     (fn [facts]
-      (for [[fact-type facts] (platform/group-by-seq fact-grouping-fn facts)]
+      (let [^java.util.Map type->nodes-facts (java.util.LinkedHashMap.)]
+        
+        (doseq [fact facts
+                fact-subtype (type->type-with-ancestors (fact-grouping-fn fact))]
+          (insert-or-add type->nodes-facts fact-subtype fact))
+        (let [^java.util.List return-list (java.util.LinkedList.)]
+          ;; Make the list of facts for each type unmodifiable.  We use mutable structures for performance here,
+          ;; since we may have many facts.  The expectation is that the number of fact types to iterate over here
+          ;; will be small and the performance consequences of this iteration to make unmodifiable lists will be
+          ;; inconsequential.  If this assumption is incorrect we may remove this logic later and rely on a convention
+          ;; of not modifying the return value of this function.
+          (doseq [v (.values type->nodes-facts)]
+            (.add return-list [(first v) (java.util.Collections/unmodifiableList (second v))]))
+          (java.util.Collections/unmodifiableList return-list))))))
 
-        (if-let [alpha-nodes (get @alpha-map fact-type)]
-
-          ;; If the matching alpha nodes are cached, simply return them.
-          [alpha-nodes facts]
-
-          ;; The alpha nodes weren't cached for the type, so get them now.
-          (let [ancestors (conj (ancestors-fn fact-type) fact-type)
-
-                ;; Get all alpha nodes for all ancestors.  Keep them sorted to maintain
-                ;; deterministic ordering of fact propagation across the network.
-                ;; Alpha nodes do not have a :node-id of their own right now, so sort
-                ;; by the :node-id of their :children.
-                new-nodes (sort-by #(mapv :node-id (:children %))
-                                   (into []
-                                         (comp (map #(get alpha-roots %))
-                                               cat
-                                               (distinct))
-                                         ancestors))]
-
-            (swap! alpha-map assoc fact-type new-nodes)
-            [new-nodes facts]))))))
 
 (sc/defn build-network
   "Constructs the network from compiled beta tree and condition functions."
