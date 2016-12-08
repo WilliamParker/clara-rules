@@ -4976,3 +4976,10 @@
           (str "As long as one negation condition in the :or matches, regardless of how many facts match the other "
                "negation the rule should fire for join type " join-type)))))
 
+(deftest test-simple-update
+  (let [cold-windy-query (dsl/parse-query [] [[ColdAndWindy (= ?t temperature)]])
+
+        empty-session (mk-session [cold-windy-query] :cache false)]
+
+    (def u empty-session)))
+

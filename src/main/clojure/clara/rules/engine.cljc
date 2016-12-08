@@ -75,6 +75,8 @@
   ;; Inserts a fact.
   (insert [session fact])
 
+  (update-facts [session fact-pairs])
+
   ;; Retracts a fact.
   (retract [session fact])
 
@@ -116,7 +118,12 @@
   (send-elements [transport memory listener nodes elements])
   (send-tokens [transport memory listener nodes tokens])
   (retract-elements [transport memory listener nodes elements])
-  (retract-tokens [transport memory listener nodes tokens]))
+  (retract-tokens [transport memory listener nodes tokens])
+  (update-elements [transport memory listener nodes element-pairs]))
+
+(defprotocol IUpdate
+  (right-update [node element-pairs memory transport listener])
+  (left-update [node token-pairs memory transport listener]))
 
 (defn- propagate-items-to-nodes [transport memory listener nodes items propagate-fn]
   (doseq [node nodes
@@ -156,12 +163,17 @@
     (propagate-items-to-nodes transport memory listener nodes elements right-retract))
 
   (retract-tokens [transport memory listener nodes tokens]
-    (propagate-items-to-nodes transport memory listener nodes tokens left-retract)))
+    (propagate-items-to-nodes transport memory listener nodes tokens left-retract))
+
+  (update-elements [transport memory listener nodes element-pairs]
+    (doseq [node nodes]
+      (right-update node element-pairs memory transport listener))))
 
 ;; Protocol for activation of Rete alpha nodes.
 (defprotocol IAlphaActivate
   (alpha-activate [node facts memory transport listener])
-  (alpha-retract [node facts memory transport listener]))
+  (alpha-retract [node facts memory transport listener])
+  (alpha-update [node fact-pairs memory transport listener]))
 
 ;; Record indicating pending insertion or removal of a sequence of facts.
 (defrecord PendingUpdate [type facts])
@@ -404,12 +416,44 @@
                                [fact bindings])]
       (l/alpha-retract! listener node (map first fact-binding-pairs))
       (retract-elements
-        transport
-        memory
-        listener
-        children
-        (for [[fact bindings] fact-binding-pairs]
-          (->Element fact bindings))))))
+       transport
+       memory
+       listener
+       children
+       (for [[fact bindings] fact-binding-pairs]
+         (->Element fact bindings)))))
+
+  (alpha-update [node fact-pairs memory transport listener]
+    (let [new-old-pairs (for [[old-fact new-fact] fact-pairs
+                              :let [old-bindings (activation old-fact env)
+                                    new-bindings (activation new-fact env)]]
+                          [old-fact old-bindings new-fact new-bindings])
+
+          grouped-pairs (platform/tuned-group-by (fn [pairs]
+                                                   (cond
+
+                                                     (and (second pairs)
+                                                          (nth pairs 3))
+                                                     :both-match
+
+                                                     :else
+                                                     :dummy))
+                                                 new-old-pairs)
+
+          both-match-element-pairs (for [[old-fact old-bindings new-fact new-bindings] (get grouped-pairs :both-match)]
+                                     [(->Element old-fact old-bindings)
+                                      (->Element new-fact new-bindings)])]
+
+      ))
+
+      
+       
+      
+      
+        
+      
+
+  )
 
 (defrecord RootJoinNode [id condition children binding-keys]
   ILeftActivate
@@ -1586,6 +1630,23 @@
                      transport
                      (l/to-persistent! transient-listener)
                      get-alphas-fn)))
+
+  (update-facts [session fact-pairs]
+    (let [transient-memory (mem/to-transient memory)
+          transient-listener (l/to-transient listener)]
+
+
+      (doseq [[old-fact new-fact] fact-pairs
+              [alpha-roots fact-group] (get-alphas-fn [old-fact])
+              root alpha-roots]
+        (alpha-update root [[old-fact new-fact]] transient-memory transport transient-listener))
+
+      (LocalSession. rulebase
+                     (mem/to-persistent! transient-memory)
+                     transport
+                     (l/to-persistent! transient-listener)
+                     get-alphas-fn)))
+  
 
   (retract [session facts]
 
