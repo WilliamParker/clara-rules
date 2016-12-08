@@ -285,7 +285,7 @@
   (swap! (:pending-updates *current-session*) into [(->PendingUpdate :retract facts)]))
 
 ;; Record for the production node in the Rete network.
-(defrecord ProductionNode [id production rhs]
+(defrecord ProductionNode [id production rhs bindings-used]
   ILeftActivate
   (left-activate [node join-bindings tokens memory transport listener]
 

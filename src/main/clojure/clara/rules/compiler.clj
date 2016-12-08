@@ -1164,7 +1164,6 @@
                     {:node-type :query
                      :query production}))))))
 
-
 (sc/defn to-beta-graph :- schema/BetaGraph
 
   "Produces a description of the beta network."
@@ -1350,7 +1349,8 @@
                                                     :msg "compiling production node"}}
                             (:ns-name production) (assoc #'*ns* (the-ns (:ns-name production))))
              (compile-expr id
-                           action-expr)))
+                           action-expr))
+           (-> production :rhs variables-as-keywords))
           {:action-expr action-expr}))
 
       :query

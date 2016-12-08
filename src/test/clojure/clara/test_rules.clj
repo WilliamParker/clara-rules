@@ -2480,7 +2480,7 @@
 
         session4 (-> (mk-session [temp-query create-data history])
                      (fire-rules))]
-
+    
     ;; We should match an empty list to start.
     (is (= [{:?t (->TemperatureHistory #{(->Temperature 20 "MCI")
                                          (->Temperature 25 "MCI")
