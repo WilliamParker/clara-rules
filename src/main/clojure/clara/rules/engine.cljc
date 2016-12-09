@@ -502,7 +502,24 @@
 
   IUpdate
   (right-update [node element-pairs memory transport listener]
-    (println "Element pairs: " element-pairs))
+    
+    (let [element-pairs-present (persistent!
+                                 (reduce (fn [existing [old-element new-element]]
+                                           (let [old-element-join-bindings (select-keys (:bindings old-element) binding-keys)]
+                                             (if (not-empty (mem/remove-elements!
+                                                             memory node
+                                                             old-element-join-bindings
+                                                             [old-element]))
+                                               (conj! existing [old-element new-element])
+                                               existing)))
+                                         (transient [])
+                                         element-pairs))]
+      
+      (println "Element pairs: " element-pairs)
+      (println "Element pairs present: " element-pairs-present)
+
+
+      ))
 
     
 
