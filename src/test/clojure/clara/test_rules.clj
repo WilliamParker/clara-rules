@@ -4979,7 +4979,16 @@
 (deftest test-simple-update
   (let [cold-windy-query (dsl/parse-query [] [[ColdAndWindy (= ?t temperature)]])
 
-        empty-session (mk-session [cold-windy-query] :cache false)]
+        empty-session (mk-session [cold-windy-query] :cache false)
+
+        with-initial-fact (-> empty-session
+                              (insert (->ColdAndWindy 10 20))
+                              fire-rules)
+
+        updated (.update_facts with-initial-fact [[(->ColdAndWindy 10 20) (->ColdAndWindy 15 20)]])
+
+
+        ]
 
     (def u empty-session)))
 

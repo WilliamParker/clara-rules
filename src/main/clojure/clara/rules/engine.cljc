@@ -444,15 +444,14 @@
                                      [(->Element old-fact old-bindings)
                                       (->Element new-fact new-bindings)])]
 
+      (update-elements
+       transport
+       memory
+       listener
+       children
+       both-match-element-pairs)
+
       ))
-
-      
-       
-      
-      
-        
-      
-
   )
 
 (defrecord RootJoinNode [id condition children binding-keys]
@@ -499,7 +498,16 @@
      listener
      children
      (for [{:keys [fact bindings] :as element} (mem/remove-elements! memory node join-bindings elements)]
-       (->Token [[fact (:id node)]] bindings)))))
+       (->Token [[fact (:id node)]] bindings))))
+
+  IUpdate
+  (right-update [node element-pairs memory transport listener]
+    (println "Element pairs: " element-pairs))
+
+    
+
+
+  )
 
 ;; Record for the join node, a type of beta node in the rete network. This node performs joins
 ;; between left and right activations, creating new tokens when joins match and sending them to
