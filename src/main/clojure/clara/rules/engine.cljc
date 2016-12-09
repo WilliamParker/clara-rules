@@ -119,7 +119,11 @@
   (send-tokens [transport memory listener nodes tokens])
   (retract-elements [transport memory listener nodes elements])
   (retract-tokens [transport memory listener nodes tokens])
-  (update-elements [transport memory listener nodes element-pairs]))
+  (update-elements [transport memory listener nodes element-pairs])
+  (update-tokens [transport memory listener nodes tokens])
+  
+
+  )
 
 (defprotocol IUpdate
   (right-update [node element-pairs memory transport listener])
@@ -167,7 +171,11 @@
 
   (update-elements [transport memory listener nodes element-pairs]
     (doseq [node nodes]
-      (right-update node element-pairs memory transport listener))))
+      (right-update node element-pairs memory transport listener)))
+
+  (update-tokens [transport memory listener nodes token-pairs]
+    (doseq [node nodes]
+      (left-update node token-pairs memory transport listener))))
 
 ;; Protocol for activation of Rete alpha nodes.
 (defprotocol IAlphaActivate
@@ -390,7 +398,24 @@
 
   (get-join-keys [node] param-keys)
 
-  (description [node] (str "QueryNode -- " query)))
+  (description [node] (str "QueryNode -- " query))
+
+  IUpdate
+  (left-update [node token-pairs memory transport listener]
+
+    (let [to-add (persistent! (reduce (fn [existing [old-token new-token]]
+                                        (let [old-bindings (select-keys (:bindings old-token) param-keys)
+                                              removed (mem/remove-tokens! memory node old-bindings [old-token])]
+                                          (if (not-empty removed)
+                                            (conj! existing new-token)
+                                            existing)))
+                                      (transient [])
+                                      token-pairs))]
+      (doseq [new-token to-add]
+        (mem/add-tokens! memory node (select-keys (:bindings new-token) param-keys) [new-token]))
+      
+
+      (println "Query node token pairs: " token-pairs))))
 
 ;; Record representing alpha nodes in the Rete network,
 ;; each of which evaluates a single condition and
@@ -518,13 +543,14 @@
       (println "Element pairs: " element-pairs)
       (println "Element pairs present: " element-pairs-present)
 
-
-      ))
-
-    
-
-
-  )
+      (update-tokens
+       transport
+       memory
+       listener
+       children
+       (for [[old-element new-element] element-pairs-present]
+         [(->Token [[(:fact old-element) (:id node)]] (:bindings old-element))
+          (->Token [[(:fact new-element) (:id node)]] (:bindings new-element))])))))
 
 ;; Record for the join node, a type of beta node in the rete network. This node performs joins
 ;; between left and right activations, creating new tokens when joins match and sending them to

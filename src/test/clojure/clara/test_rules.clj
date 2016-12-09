@@ -4985,10 +4985,17 @@
                               (insert (->ColdAndWindy 10 20))
                               fire-rules)
 
-        updated (.update_facts with-initial-fact [[(->ColdAndWindy 10 20) (->ColdAndWindy 15 20)]])
+        update-present-fact (.update_facts with-initial-fact [[(->ColdAndWindy 10 20) (->ColdAndWindy 15 20)]])
 
+        update-absent-fact (.update_facts with-initial-fact [[(->ColdAndWindy 11 20) (->ColdAndWindy 15 20)]])]
 
-        ]
+    (is (= (query update-present-fact cold-windy-query)
+           [{:?t 15}])
+        "Update of a fact that is present in the session.")
+
+    (is (= (query update-absent-fact cold-windy-query)
+           [{:?t 10}])
+        "Update of fact not present in the session.")
 
     (def u empty-session)))
 
