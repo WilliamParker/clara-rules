@@ -401,6 +401,8 @@
 
           to-add-tokens (persistent! to-add-tokens)]
 
+      (mem/add-tokens! memory node {} to-add-tokens)
+
       ))
   )
 
