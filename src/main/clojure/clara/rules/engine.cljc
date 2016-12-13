@@ -412,10 +412,7 @@
                                       (transient [])
                                       token-pairs))]
       (doseq [new-token to-add]
-        (mem/add-tokens! memory node (select-keys (:bindings new-token) param-keys) [new-token]))
-      
-
-      (println "Query node token pairs: " token-pairs))))
+        (mem/add-tokens! memory node (select-keys (:bindings new-token) param-keys) [new-token])))))
 
 ;; Record representing alpha nodes in the Rete network,
 ;; each of which evaluates a single condition and
@@ -539,9 +536,6 @@
                                                existing)))
                                          (transient [])
                                          element-pairs))]
-      
-      (println "Element pairs: " element-pairs)
-      (println "Element pairs present: " element-pairs-present)
 
       (update-tokens
        transport
