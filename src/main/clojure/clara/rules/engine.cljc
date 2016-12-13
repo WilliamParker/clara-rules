@@ -1678,20 +1678,25 @@
                      get-alphas-fn)))
 
   (update-facts [session fact-pairs]
-    (let [transient-memory (mem/to-transient memory)
-          transient-listener (l/to-transient listener)]
+
+    (binding [*pending-external-retractions* (atom [])]
+      
+      (let [transient-memory (mem/to-transient memory)
+            transient-listener (l/to-transient listener)]
 
 
-      (doseq [[old-fact new-fact] fact-pairs
-              [alpha-roots fact-group] (get-alphas-fn [old-fact])
-              root alpha-roots]
-        (alpha-update root [[old-fact new-fact]] transient-memory transport transient-listener))
+        (doseq [[old-fact new-fact] fact-pairs
+                [alpha-roots fact-group] (get-alphas-fn [old-fact])
+                root alpha-roots]
+          (alpha-update root [[old-fact new-fact]] transient-memory transport transient-listener))
 
-      (LocalSession. rulebase
-                     (mem/to-persistent! transient-memory)
-                     transport
-                     (l/to-persistent! transient-listener)
-                     get-alphas-fn)))
+        (external-retract-loop get-alphas-fn transient-memory transport transient-listener)
+
+        (LocalSession. rulebase
+                       (mem/to-persistent! transient-memory)
+                       transport
+                       (l/to-persistent! transient-listener)
+                       get-alphas-fn))))
   
 
   (retract [session facts]
