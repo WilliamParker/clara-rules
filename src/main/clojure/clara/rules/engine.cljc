@@ -304,39 +304,10 @@
   [facts]
   (swap! (:pending-updates *current-session*) into [(->PendingUpdate :retract facts)]))
 
-;; Record for the production node in the Rete network.
-(defrecord ProductionNode [id production rhs bindings-used]
-  ILeftActivate
-  (left-activate [node join-bindings tokens memory transport listener]
 
-    (l/left-activate! listener node tokens)
-
-    ;; Fire the rule if it's not a no-loop rule, or if the rule is not
-    ;; active in the current context.
-    (when (or (not (get-in production [:props :no-loop]))
-              (not (= production (get-in *rule-context* [:node :production]))))
-
-      ;; Preserve tokens that fired for the rule so we
-      ;; can perform retractions if they become false.
-      (mem/add-tokens! memory node join-bindings tokens)
-
-      (let [activations (for [token tokens]
-                          (->Activation node token))]
-
-        (l/add-activations! listener node activations)
-
-        ;; The production matched, so add the tokens to the activation list.
-        (mem/add-activations! memory production activations))))
-
-  (left-retract [node join-bindings tokens memory transport listener]
-
-    (l/left-retract! listener node tokens)
-
-    ;; Remove any tokens to avoid future rule execution on retracted items.
-    (mem/remove-tokens! memory node join-bindings tokens)
-
-    ;; Remove pending activations triggered by the retracted tokens.
-    (let [activations (for [token tokens]
+(defn- rule-left-retract*
+  [node listener memory production tokens]
+  (let [activations (for [token tokens]
                         (->Activation node token))]
 
       (l/remove-activations! listener node activations)
@@ -377,8 +348,41 @@
           (throw (ex-info (str "Attempting to retract from a ProductionNode when neither *current-session* nor "
                                "*pending-external-retractions* is bound is illegal.")
                           {:node node
-                           :join-bindings join-bindings
                            :tokens tokens}))))))
+
+
+;; Record for the production node in the Rete network.
+(defrecord ProductionNode [id production rhs bindings-used]
+  ILeftActivate
+  (left-activate [node join-bindings tokens memory transport listener]
+
+    (l/left-activate! listener node tokens)
+
+    ;; Fire the rule if it's not a no-loop rule, or if the rule is not
+    ;; active in the current context.
+    (when (or (not (get-in production [:props :no-loop]))
+              (not (= production (get-in *rule-context* [:node :production]))))
+
+      ;; Preserve tokens that fired for the rule so we
+      ;; can perform retractions if they become false.
+      (mem/add-tokens! memory node join-bindings tokens)
+
+      (let [activations (for [token tokens]
+                          (->Activation node token))]
+
+        (l/add-activations! listener node activations)
+
+        ;; The production matched, so add the tokens to the activation list.
+        (mem/add-activations! memory production activations))))
+
+  (left-retract [node join-bindings tokens memory transport listener]
+
+    (l/left-retract! listener node tokens)
+
+    ;; Remove any tokens to avoid future rule execution on retracted items.
+    (mem/remove-tokens! memory node join-bindings tokens)
+
+    (rule-left-retract* node listener memory production tokens))
 
   (get-join-keys [node] [])
 
@@ -402,6 +406,15 @@
           to-add-tokens (persistent! to-add-tokens)]
 
       (mem/add-tokens! memory node {} to-add-tokens)
+
+      ;; Begin retraction logic
+
+
+
+
+
+
+      
 
       ))
   )
