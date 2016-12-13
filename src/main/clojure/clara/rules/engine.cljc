@@ -75,6 +75,8 @@
   ;; Inserts a fact.
   (insert [session fact])
 
+  (update-facts [session fact-pairs])
+
   ;; Retracts a fact.
   (retract [session fact])
 
@@ -116,7 +118,16 @@
   (send-elements [transport memory listener nodes elements])
   (send-tokens [transport memory listener nodes tokens])
   (retract-elements [transport memory listener nodes elements])
-  (retract-tokens [transport memory listener nodes tokens]))
+  (retract-tokens [transport memory listener nodes tokens])
+  (update-elements [transport memory listener nodes element-pairs])
+  (update-tokens [transport memory listener nodes tokens])
+  
+
+  )
+
+(defprotocol IUpdate
+  (right-update [node element-pairs memory transport listener])
+  (left-update [node token-pairs memory transport listener]))
 
 (defn- propagate-items-to-nodes [transport memory listener nodes items propagate-fn]
   (doseq [node nodes
@@ -156,12 +167,21 @@
     (propagate-items-to-nodes transport memory listener nodes elements right-retract))
 
   (retract-tokens [transport memory listener nodes tokens]
-    (propagate-items-to-nodes transport memory listener nodes tokens left-retract)))
+    (propagate-items-to-nodes transport memory listener nodes tokens left-retract))
+
+  (update-elements [transport memory listener nodes element-pairs]
+    (doseq [node nodes]
+      (right-update node element-pairs memory transport listener)))
+
+  (update-tokens [transport memory listener nodes token-pairs]
+    (doseq [node nodes]
+      (left-update node token-pairs memory transport listener))))
 
 ;; Protocol for activation of Rete alpha nodes.
 (defprotocol IAlphaActivate
   (alpha-activate [node facts memory transport listener])
-  (alpha-retract [node facts memory transport listener]))
+  (alpha-retract [node facts memory transport listener])
+  (alpha-update [node fact-pairs memory transport listener]))
 
 ;; Record indicating pending insertion or removal of a sequence of facts.
 (defrecord PendingUpdate [type facts])
@@ -285,7 +305,7 @@
   (swap! (:pending-updates *current-session*) into [(->PendingUpdate :retract facts)]))
 
 ;; Record for the production node in the Rete network.
-(defrecord ProductionNode [id production rhs]
+(defrecord ProductionNode [id production rhs bindings-used]
   ILeftActivate
   (left-activate [node join-bindings tokens memory transport listener]
 
@@ -378,7 +398,21 @@
 
   (get-join-keys [node] param-keys)
 
-  (description [node] (str "QueryNode -- " query)))
+  (description [node] (str "QueryNode -- " query))
+
+  IUpdate
+  (left-update [node token-pairs memory transport listener]
+
+    (let [to-add (persistent! (reduce (fn [existing [old-token new-token]]
+                                        (let [old-bindings (select-keys (:bindings old-token) param-keys)
+                                              removed (mem/remove-tokens! memory node old-bindings [old-token])]
+                                          (if (not-empty removed)
+                                            (conj! existing new-token)
+                                            existing)))
+                                      (transient [])
+                                      token-pairs))]
+      (doseq [new-token to-add]
+        (mem/add-tokens! memory node (select-keys (:bindings new-token) param-keys) [new-token])))))
 
 ;; Record representing alpha nodes in the Rete network,
 ;; each of which evaluates a single condition and
@@ -404,12 +438,43 @@
                                [fact bindings])]
       (l/alpha-retract! listener node (map first fact-binding-pairs))
       (retract-elements
-        transport
-        memory
-        listener
-        children
-        (for [[fact bindings] fact-binding-pairs]
-          (->Element fact bindings))))))
+       transport
+       memory
+       listener
+       children
+       (for [[fact bindings] fact-binding-pairs]
+         (->Element fact bindings)))))
+
+  (alpha-update [node fact-pairs memory transport listener]
+    (let [new-old-pairs (for [[old-fact new-fact] fact-pairs
+                              :let [old-bindings (activation old-fact env)
+                                    new-bindings (activation new-fact env)]]
+                          [old-fact old-bindings new-fact new-bindings])
+
+          grouped-pairs (platform/tuned-group-by (fn [pairs]
+                                                   (cond
+
+                                                     (and (second pairs)
+                                                          (nth pairs 3))
+                                                     :both-match
+
+                                                     :else
+                                                     :dummy))
+                                                 new-old-pairs)
+
+          both-match-element-pairs (for [[old-fact old-bindings new-fact new-bindings] (get grouped-pairs :both-match)]
+                                     [(->Element old-fact old-bindings)
+                                      (->Element new-fact new-bindings)])]
+
+      (update-elements
+       transport
+       memory
+       listener
+       children
+       both-match-element-pairs)
+
+      ))
+  )
 
 (defrecord RootJoinNode [id condition children binding-keys]
   ILeftActivate
@@ -455,7 +520,32 @@
      listener
      children
      (for [{:keys [fact bindings] :as element} (mem/remove-elements! memory node join-bindings elements)]
-       (->Token [[fact (:id node)]] bindings)))))
+       (->Token [[fact (:id node)]] bindings))))
+
+  IUpdate
+  (right-update [node element-pairs memory transport listener]
+    
+    (let [;; If an element being replaced is not currently present, then don't do anything.
+          element-pairs-present (persistent!
+                                 (reduce (fn [existing [old-element new-element]]
+                                           (let [old-element-join-bindings (select-keys (:bindings old-element) binding-keys)]
+                                             (if (not-empty (mem/remove-elements!
+                                                             memory node
+                                                             old-element-join-bindings
+                                                             [old-element]))
+                                               (conj! existing [old-element new-element])
+                                               existing)))
+                                         (transient [])
+                                         element-pairs))]
+
+      (update-tokens
+       transport
+       memory
+       listener
+       children
+       (for [[old-element new-element] element-pairs-present]
+         [(->Token [[(:fact old-element) (:id node)]] (:bindings old-element))
+          (->Token [[(:fact new-element) (:id node)]] (:bindings new-element))])))))
 
 ;; Record for the join node, a type of beta node in the rete network. This node performs joins
 ;; between left and right activations, creating new tokens when joins match and sending them to
@@ -1586,6 +1676,23 @@
                      transport
                      (l/to-persistent! transient-listener)
                      get-alphas-fn)))
+
+  (update-facts [session fact-pairs]
+    (let [transient-memory (mem/to-transient memory)
+          transient-listener (l/to-transient listener)]
+
+
+      (doseq [[old-fact new-fact] fact-pairs
+              [alpha-roots fact-group] (get-alphas-fn [old-fact])
+              root alpha-roots]
+        (alpha-update root [[old-fact new-fact]] transient-memory transport transient-listener))
+
+      (LocalSession. rulebase
+                     (mem/to-persistent! transient-memory)
+                     transport
+                     (l/to-persistent! transient-listener)
+                     get-alphas-fn)))
+  
 
   (retract [session facts]
 
