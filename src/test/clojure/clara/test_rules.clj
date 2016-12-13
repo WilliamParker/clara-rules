@@ -4995,7 +4995,5 @@
 
     (is (= (query update-absent-fact cold-windy-query)
            [{:?t 10}])
-        "Update of fact not present in the session.")
-
-    (def u empty-session)))
+        "Update of fact not present in the session.")))
 

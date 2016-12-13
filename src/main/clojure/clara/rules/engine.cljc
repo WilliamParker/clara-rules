@@ -525,7 +525,8 @@
   IUpdate
   (right-update [node element-pairs memory transport listener]
     
-    (let [element-pairs-present (persistent!
+    (let [;; If an element being replaced is not currently present, then don't do anything.
+          element-pairs-present (persistent!
                                  (reduce (fn [existing [old-element new-element]]
                                            (let [old-element-join-bindings (select-keys (:bindings old-element) binding-keys)]
                                              (if (not-empty (mem/remove-elements!
