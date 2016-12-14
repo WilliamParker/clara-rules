@@ -407,17 +407,17 @@
 
       (mem/add-tokens! memory node {} to-add-tokens)
 
+      (let [activations (for [token to-add-tokens]
+                          (->Activation node token))]
+
+        (l/add-activations! listener node activations)
+
+        ;; The production matched, so add the tokens to the activation list.
+        (mem/add-activations! memory production activations))
+
       ;; Begin retraction logic
 
-
-
-
-
-
-      
-
-      ))
-  )
+      (rule-left-retract* node listener memory production removed-tokens))))
 
 ;; The QueryNode is a terminal node that stores the
 ;; state that can be queried by a rule user.
