@@ -317,13 +317,16 @@
 
     ;; Remove pending activations triggered by the retracted tokens.
     (let [activations (for [token tokens]
-                        (->Activation node token))]
+                        (->Activation node token))
 
-      (l/remove-activations! listener node activations)
-      (mem/remove-activations! memory production activations))
+          [removed-activations unremoved-activations]
+          (mem/remove-activations! memory production activations)
 
-    ;; Retract any insertions that occurred due to the retracted token.
-    (let [token-insertion-map (mem/remove-insertions! memory node tokens)]
+          _ (l/remove-activations! listener node removed-activations)
+
+          unremoved-tokens (mapv :token unremoved-activations)
+
+          token-insertion-map (mem/remove-insertions! memory node unremoved-tokens)]
 
       (when-let [insertions (seq (apply concat (vals token-insertion-map)))]
         ;; If there is current session with rules firing, add these items to the queue

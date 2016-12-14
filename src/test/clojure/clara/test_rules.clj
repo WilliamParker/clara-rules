@@ -4993,3 +4993,22 @@
                     (fire-rules))]
 
     (is (has-fact? @rule-output (->Temperature 10 "MCI")))))
+
+(deftest test-remove-pending-activation-with-equal-previous-insertion
+  ;; See issue 250 for details of the bug fix this tests.
+  (let [lousy-weather-rule (dsl/parse-rule [[?cw <- ColdAndWindy]]
+                                           (insert! (->LousyWeather)))
+
+        lousy-weather-query (dsl/parse-query [] [[LousyWeather]])
+
+        empty-session (mk-session [lousy-weather-rule lousy-weather-query] :cache false)
+
+        end-session (-> empty-session
+                        (insert (->ColdAndWindy 10 10))
+                        fire-rules
+                        (insert (->ColdAndWindy 10 10))
+                        (retract (->ColdAndWindy 10 10))
+                        fire-rules)]
+
+    (is (= (query end-session lousy-weather-query)
+           [{}]))))
