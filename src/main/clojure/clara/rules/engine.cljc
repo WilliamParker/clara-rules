@@ -391,15 +391,15 @@
   IUpdate
   (left-update [node token-pairs memory transport listener]
 
-    (let [[removed-tokens to-add-tokens] (reduce (fn [[existing-removed existing-to-add]
-                                                      [old-token new-token]]
-                                                   (let [removed (mem/remove-tokens! memory node {} [old-token])]
-                                                     (if (not-empty removed)
-                                                       [(conj! existing-removed old-token)
-                                                        (conj! existing-to-add new-token)]
-                                                       [existing-removed existing-to-add])))
-                                                 [(transient []) (transient [])]
-                                                 token-pairs)
+    (let [[removed-tokens to-add-tokens removed-pairs] (reduce (fn [[existing-removed existing-to-add existing-pairs]
+                                                                    [old-token new-token]]
+                                                                 (let [removed (mem/remove-tokens! memory node {} [old-token])]
+                                                                   (if (not-empty removed)
+                                                                     [(conj! existing-removed old-token)
+                                                                      (conj! existing-to-add new-token)]
+                                                                     [existing-removed existing-to-add])))
+                                                               [(transient []) (transient [])]
+                                                               token-pairs)
 
           removed-tokens (persistent! removed-tokens)
 
