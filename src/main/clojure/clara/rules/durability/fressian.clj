@@ -47,29 +47,58 @@
             WeakHashMap]
            [java.io
             InputStream
-            OutputStream]))
+            OutputStream]
+           [java.util.concurrent.locks
+            ReentrantLock]))
 
 ;; Use this map to cache the symbol for the map->RecordNameHere
 ;; factory function created for every Clojure record to improve
-;; serialization performance.
+;; serialization performance.  Any access to this cache outside
+;; the context of record-map-constructor-name must be careful to avoid
+;; problems resulting from concurrency.
 ;; See https://github.com/cerner/clara-rules/issues/245 for more extensive discussion.
 (def ^:private ^Map class->factory-fn-sym (WeakHashMap.))
 
-(defn record-map-constructor-name
-  "Return the 'map->' prefix, factory constructor function for a Clojure record."
-  [rec]
-  (let [klass (class rec)]
-    (if-let [cached-sym (.get class->factory-fn-sym klass)]
-      cached-sym
-      (let [class-name (.getName ^Class klass)
-            idx (.lastIndexOf class-name (int \.))
-            ns-nom (.substring class-name 0 idx)
-            nom (.substring class-name (inc idx))
-            factory-fn-sym (symbol (str (cm/demunge ns-nom)
-                                        "/map->"
-                                        (cm/demunge nom)))]
-        (.put class->factory-fn-sym klass factory-fn-sym)
-        factory-fn-sym))))
+;; Any operations on the class->factory-fn-sym should be done after
+;; acquiring the lock. Without this synchronization simultaneous reads and writes
+;; could leave the cache in an undefined state.  Once the lock is unlocked the JVM will guarantee
+;; that later reads reflect the new cache status after the write; see
+;; http://www.ibm.com/developerworks/java/library/j-jtp03304/ for more extensive discussion.  In particular,
+;; the stipulation we care about is that
+;; "An unlock on a monitor happens-before every subsequent lock on that same monitor".
+;;
+;; Another option would be to use a ReadWriteLock, but this could have significant overhead in the single-threaded case,
+;; and we currently expect to mostly just be doing this on one thread at a time.
+;; Since the operation in question is in an absolute sense cheap we just revert to
+;; performing it again if another thread has the lock on the cache
+;; rather than risking a deadlock scenario.  In any case the most performant option will be for record classes to use
+;; their own Fressian handler that avoids this sort of lookup entirely.
+
+(let [cache-lock (ReentrantLock.)]
+  (defn record-map-constructor-name
+    "Return the 'map->' prefix, factory constructor function for a Clojure record."
+    [rec]
+    (let [klass (class rec)
+          cached-sym (when (.tryLock cache-lock)
+                       (try
+                         (.get class->factory-fn-sym klass)
+                         (finally
+                           (.unlock cache-lock))))]
+      (if cached-sym
+        cached-sym
+        (let [class-name (.getName ^Class klass)
+              idx (.lastIndexOf class-name (int \.))
+              ns-nom (.substring class-name 0 idx)
+              nom (.substring class-name (inc idx))
+              factory-fn-sym (symbol (str (cm/demunge ns-nom)
+                                          "/map->"
+                                          (cm/demunge nom)))]
+          (when (.tryLock cache-lock)
+            (try
+              (.put class->factory-fn-sym klass factory-fn-sym)
+              (finally
+                (.unlock cache-lock))))
+          factory-fn-sym)))))
 
 (defn write-map
   "Writes a map as Fressian with the tag 'map' and all keys cached."
