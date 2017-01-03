@@ -304,17 +304,57 @@
   [facts]
   (swap! (:pending-updates *current-session*) into [(->PendingUpdate :retract facts)]))
 
+;; Record for the production node in the Rete network.
+(defrecord ProductionNode [id production rhs rhs-bindings]
+  ILeftActivate
+  (left-activate [node join-bindings tokens memory transport listener]
 
-(defn- rule-left-retract*
-  [node listener memory production tokens]
-  (let [activations (for [token tokens]
-                        (->Activation node token))]
+    (l/left-activate! listener node tokens)
 
-      (l/remove-activations! listener node activations)
-      (mem/remove-activations! memory production activations))
+    ;; Fire the rule if it's not a no-loop rule, or if the rule is not
+    ;; active in the current context.
+    (when (or (not (get-in production [:props :no-loop]))
+              (not (= production (get-in *rule-context* [:node :production]))))
 
-    ;; Retract any insertions that occurred due to the retracted token.
-    (let [token-insertion-map (mem/remove-insertions! memory node tokens)]
+      ;; Preserve tokens that fired for the rule so we
+      ;; can perform retractions if they become false.
+      (mem/add-tokens! memory node join-bindings tokens)
+
+      (let [activations (for [token tokens]
+                          (->Activation node token))]
+
+        (l/add-activations! listener node activations)
+
+        ;; The production matched, so add the tokens to the activation list.
+        (mem/add-activations! memory production activations))))
+
+  (left-retract [node join-bindings tokens memory transport listener]
+
+    (l/left-retract! listener node tokens)
+
+    ;; Remove any tokens to avoid future rule execution on retracted items.
+    (mem/remove-tokens! memory node join-bindings tokens)
+
+    ;; Remove pending activations triggered by the retracted tokens.
+    (let [activations (for [token tokens]
+                        (->Activation node token))
+
+          ;; We attempt to remove a pending activation for all tokens retracted, but our expectation
+          ;; is that each token may remove a pending activation
+          ;; or logical insertions from a previous rule activation but not both.
+          ;; We first attempt to use each token to remove a pending activation but keep track of which
+          ;; tokens were not used to remove an activation.
+          [removed-activations unremoved-activations]
+          (mem/remove-activations! memory production activations)
+
+          _ (l/remove-activations! listener node removed-activations)
+
+          unremoved-tokens (mapv :token unremoved-activations)
+
+          ;; Now use each token that was not used to remove a pending activation to remove
+          ;; the logical insertions from a previous activation if the truth maintenance system
+          ;; has a matching previous activation.
+          token-insertion-map (mem/remove-insertions! memory node unremoved-tokens)]
 
       (when-let [insertions (seq (apply concat (vals token-insertion-map)))]
         ;; If there is current session with rules firing, add these items to the queue
@@ -348,41 +388,8 @@
           (throw (ex-info (str "Attempting to retract from a ProductionNode when neither *current-session* nor "
                                "*pending-external-retractions* is bound is illegal.")
                           {:node node
+                           :join-bindings join-bindings
                            :tokens tokens}))))))
-
-
-;; Record for the production node in the Rete network.
-(defrecord ProductionNode [id production rhs bindings-used]
-  ILeftActivate
-  (left-activate [node join-bindings tokens memory transport listener]
-
-    (l/left-activate! listener node tokens)
-
-    ;; Fire the rule if it's not a no-loop rule, or if the rule is not
-    ;; active in the current context.
-    (when (or (not (get-in production [:props :no-loop]))
-              (not (= production (get-in *rule-context* [:node :production]))))
-
-      ;; Preserve tokens that fired for the rule so we
-      ;; can perform retractions if they become false.
-      (mem/add-tokens! memory node join-bindings tokens)
-
-      (let [activations (for [token tokens]
-                          (->Activation node token))]
-
-        (l/add-activations! listener node activations)
-
-        ;; The production matched, so add the tokens to the activation list.
-        (mem/add-activations! memory production activations))))
-
-  (left-retract [node join-bindings tokens memory transport listener]
-
-    (l/left-retract! listener node tokens)
-
-    ;; Remove any tokens to avoid future rule execution on retracted items.
-    (mem/remove-tokens! memory node join-bindings tokens)
-
-    (rule-left-retract* node listener memory production tokens))
 
   (get-join-keys [node] [])
 
@@ -391,33 +398,45 @@
   IUpdate
   (left-update [node token-pairs memory transport listener]
 
-    (let [[removed-tokens to-add-tokens removed-pairs] (reduce (fn [[existing-removed existing-to-add existing-pairs]
-                                                                    [old-token new-token]]
-                                                                 (let [removed (mem/remove-tokens! memory node {} [old-token])]
-                                                                   (if (not-empty removed)
-                                                                     [(conj! existing-removed old-token)
-                                                                      (conj! existing-to-add new-token)]
-                                                                     [existing-removed existing-to-add])))
-                                                               [(transient []) (transient [])]
-                                                               token-pairs)
+    (let [removed-pairs (persistent!
+                         (reduce (fn [existing-pairs
+                                      [old-token new-token]]
+                                   (let [removed (mem/remove-tokens! memory node {} [old-token])]
+                                     (if (not-empty removed)
+                                       (conj! existing-pairs [old-token new-token])
+                                       existing-pairs)))
+                                 (transient [])
+                                 token-pairs))
 
-          removed-tokens (persistent! removed-tokens)
+          activations (for [[old-token new-token] removed-pairs]
+                        (with-meta (->Activation node old-token)
+                          {::new-token new-token}))
 
-          to-add-tokens (persistent! to-add-tokens)]
+          [removed-activations unremoved-activations]
+          (mem/remove-activations! memory production activations)
 
-      (mem/add-tokens! memory node {} to-add-tokens)
+          removed-activations-replacement-tokens (mapv (fn [act]
+                                                         (-> act meta ::new-token))
+                                                       removed-activations)
 
-      (let [activations (for [token to-add-tokens]
-                          (->Activation node token))]
+          _ (do
+              (mem/add-tokens! memory node {} removed-activations-replacement-tokens)
 
-        (l/add-activations! listener node activations)
+              (let [activations (for [token removed-activations-replacement-tokens]
+                                  (->Activation node token))]
 
-        ;; The production matched, so add the tokens to the activation list.
-        (mem/add-activations! memory production activations))
+                (l/add-activations! listener node activations)
 
-      ;; Begin retraction logic
+                ;; The production matched, so add the tokens to the activation list.
+                (mem/add-activations! memory production activations)))]
 
-      (rule-left-retract* node listener memory production removed-tokens))))
+      (println "Removed pairs: " removed-pairs)
+
+      ))
+
+
+  )
+
 
 ;; The QueryNode is a terminal node that stores the
 ;; state that can be queried by a rule user.
