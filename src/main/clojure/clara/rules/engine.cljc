@@ -428,9 +428,14 @@
                 (l/add-activations! listener node activations)
 
                 ;; The production matched, so add the tokens to the activation list.
-                (mem/add-activations! memory production activations)))]
+                (mem/add-activations! memory production activations)))
 
-      (println "Removed pairs: " removed-pairs)
+          unstaged-removed-pairs (mapv (fn [act]
+                                         [(:token act)
+                                          (-> act meta ::new-token)])
+                                       unremoved-activations)]
+
+      (println "Removed pairs: " unstaged-removed-pairs)
 
       ))
 
