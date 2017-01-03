@@ -7,16 +7,19 @@
             [clara.rules.memory :as mem]
             [clara.rules.engine :as eng]
             [clara.rules.compiler :as com]
+            [clara.rules.platform :as pform]
             [schema.core :as s]
             [clojure.data.fressian :as fres]
             [clojure.java.io :as jio]
             [clojure.main :as cm])
   (:import [clara.rules.durability
-            MemIdx]
+            MemIdx
+            InternalMemIdx]
            [clara.rules.memory
             RuleOrderedActivation]
            [clara.rules.engine
             Token
+            Element
             ProductionNode
             QueryNode
             AlphaNode
@@ -50,7 +53,8 @@
 ;; factory function created for every Clojure record to improve
 ;; serialization performance.
 ;; See https://github.com/cerner/clara-rules/issues/245 for more extensive discussion.
-(def ^:private ^Map class->factory-fn-sym (WeakHashMap.))
+(def ^:private ^Map class->factory-fn-sym (java.util.Collections/synchronizedMap
+                                           (WeakHashMap.)))
 
 (defn record-map-constructor-name
   "Return the 'map->' prefix, factory constructor function for a Clojure record."
@@ -143,7 +147,7 @@
     :writer (reify WriteHandler
               (write [_ w o]
                 (let [node-id (:id o)]
-                  (if (@d/*node-id->node-cache* node-id)
+                  (if (@(.get d/node-id->node-cache) node-id)
                     (do
                       (.writeTag w tag-for-cached 1)
                       (.writeInt w node-id))
@@ -169,7 +173,7 @@
     :writer (reify WriteHandler
               (write [_ w o]
                 (let [node-id (:id o)]
-                  (if (@d/*node-id->node-cache* node-id)
+                  (if (@(.get d/node-id->node-cache) node-id)
                     (do
                       (.writeTag w tag-for-cached 1)
                       (.writeInt w node-id))
@@ -348,7 +352,7 @@
    "clj/record"
    {:class clojure.lang.IRecord
     ;; Write a record a single time per object reference to that record.  The record is then "cached"
-    ;; with the IdentityHashMap `d/*clj-record-holder*`.  If another reference to this record instance
+    ;; with the IdentityHashMap `d/clj-record-holder`.  If another reference to this record instance
     ;; is encountered later, only the "index" of the record in the map will be written.
     :writer (reify WriteHandler
               (write [_ w rec]
@@ -489,7 +493,18 @@
     :readers {"clara/memidx"
               (reify ReadHandler
                 (read [_ rdr tag component-count]
-                  (d/find-mem-idx (.readObject rdr))))}}})
+                  (d/find-mem-idx (.readObject rdr))))}}
+
+   "clara/internalmemidx"
+   {:class InternalMemIdx
+    :writer (reify WriteHandler
+              (write [_ w c]
+                (.writeTag w "clara/internalmemidx" 1)
+                (.writeInt w (:idx c))))
+    :readers {"clara/internalmemidx"
+              (reify ReadHandler
+                (read [_ rdr tag component-count]
+                  (d/find-internal-idx (.readObject rdr))))}}})
 
 (def write-handlers
   "All Fressian write handlers used by FressianSessionSerializer's."
@@ -530,50 +545,53 @@
           (fn [sources]
             (with-open [^FressianWriter wtr
                         (fres/create-writer out-stream :handlers write-handler-lookup)]
-              (binding [d/*node-id->node-cache* (volatile! {})
-                        d/*clj-record-holder* record-holder]
-                (doseq [s sources] (fres/write-object wtr s)))))]
-
+              (pform/thread-local-binding [d/node-id->node-cache (volatile! {})
+                                           d/clj-record-holder record-holder]
+                                          (doseq [s sources] (fres/write-object wtr s)))))]
+      
       ;; In this case there is nothing to do with memory, so just serialize immediately.
       (if (:rulebase-only? opts)
         (do-serialize [rulebase])
-
+        
         ;; Otherwise memory needs to have facts extracted to return.
-        (let [{:keys [memory indexed-facts]} (d/indexed-session-memory-state memory)
+        (let [{:keys [memory indexed-facts internal-indexed-facts]} (d/indexed-session-memory-state memory)
               sources (if (:with-rulebase? opts)
-                        [rulebase memory]
-                        [memory])]
-
+                        [rulebase internal-indexed-facts memory]
+                        [internal-indexed-facts memory])]
+          
           (do-serialize sources)
           
           ;; Return the facts needing to be serialized still.
           indexed-facts))))
-
+  
   (deserialize [_ mem-facts opts]
-
+    
     (with-open [^FressianReader rdr (fres/create-reader in-stream :handlers read-handler-lookup)]
       (let [{:keys [rulebase-only? base-rulebase]} opts
-
+            
             record-holder (ArrayList.)
             ;; The rulebase should either be given from the base-session or found in
             ;; the restored session-state.
             maybe-base-rulebase (when (and (not rulebase-only?) base-rulebase)
                                   base-rulebase)
-
             rulebase (if maybe-base-rulebase
                        maybe-base-rulebase
-                       (let [without-opts-rulebase (binding [d/*node-id->node-cache* (volatile! {})
-                                                             d/*clj-record-holder* record-holder
-                                                             d/*compile-expr-fn* (memoize (fn [id expr] (com/try-eval expr)))]
-                                                     (fres/read-object rdr))]
+                       (let [without-opts-rulebase (pform/thread-local-binding [d/node-id->node-cache (volatile! {})
+                                                                                d/compile-expr-fn (memoize (fn [id expr] (com/try-eval expr)))
+                                                                                d/clj-record-holder record-holder]
+                                                                               (fres/read-object rdr))]
                          (d/rulebase->rulebase-with-opts without-opts-rulebase opts)))]
-
+        
         (if rulebase-only?
           rulebase
           (d/assemble-restored-session rulebase
-                                       (binding [d/*clj-record-holder* record-holder
-                                                 d/*mem-facts* mem-facts]
-                                         (fres/read-object rdr))
+                                       (pform/thread-local-binding [d/clj-record-holder record-holder
+                                                                    d/mem-facts mem-facts]
+                                                                   ;; internal memory contains facts provided by mem-facts
+                                                                   ;; thus mem-facts must be bound before the call to read
+                                                                   ;; the internal memory
+                                                                   (pform/thread-local-binding [d/mem-internal (fres/read-object rdr)]
+                                                                                               (fres/read-object rdr)))
                                        opts))))))
 
 (s/defn create-session-serializer
