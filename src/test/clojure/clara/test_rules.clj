@@ -5030,30 +5030,33 @@
   (let [cold-windy-query (dsl/parse-query [] [[ColdAndWindy (= ?t temperature)]])
 
         cold-windy-rule (dsl/parse-rule [[ColdAndWindy (= ?t temperature)]]
-                                         (insert! (->Cold ?t)))
+                                        (insert! (->Cold ?t)))
 
         cold-query (dsl/parse-query [] [[Cold (= ?t temperature)]])
         
-        empty-session (mk-session [cold-windy-query cold-windy-rule cold-query] :cache false)
+        empty-session (mk-session [cold-windy-query cold-windy-rule cold-query] :cache false)]
 
-        with-initial-fact (-> empty-session
-                              (insert (->ColdAndWindy 10 20))
-                              fire-rules)
+    ;;; Simple updates with the rules previously fired with all facts involved.
 
-        update-present-fact (.update_facts with-initial-fact [[(->ColdAndWindy 10 20) (->ColdAndWindy 15 20)]])
+    (let [with-initial-fact (-> empty-session
+                                (insert (->ColdAndWindy 10 20))
+                                fire-rules)
 
-        update-absent-fact (.update_facts with-initial-fact [[(->ColdAndWindy 11 20) (->ColdAndWindy 15 20)]])]
+          update-present-fact (eng/update-facts with-initial-fact [[(->ColdAndWindy 10 20) (->ColdAndWindy 15 20)]])
 
-    (is (= (query update-present-fact cold-windy-query)
-           (-> update-present-fact
-               fire-rules
-               (query cold-query))
-           [{:?t 15}])
-        "Update of a fact that is present in the session.")
+          update-absent-fact (eng/update-facts with-initial-fact [[(->ColdAndWindy 11 20) (->ColdAndWindy 15 20)]])]
 
-    (is (= (query update-absent-fact cold-windy-query)
-           (-> update-absent-fact
-               fire-rules
-               (query cold-query))
-           [{:?t 10}])
-        "Update of fact not present in the session.")))
+      (is (= (query update-present-fact cold-windy-query)
+             (-> update-present-fact
+                 fire-rules
+                 (query cold-query))
+             [{:?t 15}])
+          "Update of a fact that is present in the session.")
+      
+
+      (is (= (query update-absent-fact cold-windy-query)
+             (-> update-absent-fact
+                 fire-rules
+                 (query cold-query))
+             [{:?t 10}])
+          "Update of fact not present in the session."))))
