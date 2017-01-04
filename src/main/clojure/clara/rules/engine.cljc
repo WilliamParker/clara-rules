@@ -6,7 +6,8 @@
             [clojure.string :as string]
             [clara.rules.memory :as mem]
             [clara.rules.listener :as l]
-            [clara.rules.platform :as platform]))
+            [clara.rules.platform :as platform]
+            [clojure.set :as clj-set]))
 
 ;; The accumulator is a Rete extension to run an accumulation (such as sum, average, or similar operation)
 ;; over a collection of values passing through the Rete network. This object defines the behavior
@@ -408,6 +409,10 @@
                                  (transient [])
                                  token-pairs))
 
+          _ (mem/add-tokens! memory node {} (mapv (fn [pair]
+                                                    (nth pair 1))
+                                                  removed-pairs))
+
           activations (for [[old-token new-token] removed-pairs]
                         (with-meta (->Activation node old-token)
                           {::new-token new-token}))
@@ -420,8 +425,6 @@
                                                        removed-activations)
 
           _ (do
-              (mem/add-tokens! memory node {} removed-activations-replacement-tokens)
-
               (let [activations (for [token removed-activations-replacement-tokens]
                                   (->Activation node token))]
 
@@ -433,15 +436,44 @@
           unstaged-removed-pairs (mapv (fn [act]
                                          [(:token act)
                                           (-> act meta ::new-token)])
-                                       unremoved-activations)]
+                                       unremoved-activations)
 
-      (println "Removed pairs: " unstaged-removed-pairs)
+          pair->different-bindings (fn [[{old-bindings
+                                          :bindings}
+                                         {new-bindings
+                                          :bindings}]]
+                                     (set (filter (fn [k]
+                                                    (not= (get old-bindings k)
+                                                          (get new-bindings k)))
+                                                  (keys old-bindings))))
 
-      ))
+          difference-pairs (filterv (fn [pair]
+                                      (clj-set/intersection
+                                       (pair->different-bindings pair)
+                                       rhs-bindings))
+                                    unstaged-removed-pairs)
 
+          difference-old-tokens (mapv (fn [pair]
+                                        (nth pair 0))
+                                      difference-pairs)
 
-  )
+          difference-new-tokens (mapv (fn [pair]
+                                        (nth pair 1))
+                                      difference-pairs)
 
+          token-insertion-map (mem/remove-insertions! memory node difference-old-tokens)
+
+          to-add-activations (for [token difference-new-tokens]
+                               (->Activation node token))]
+
+      (when-let [insertions (seq (apply concat (vals token-insertion-map)))]
+
+        (do
+          (doseq [[token token-insertions] token-insertion-map]
+            (l/retract-facts-logical! listener node token token-insertions))
+          (swap! *pending-external-retractions* into insertions)))
+
+      (mem/add-activations! memory production to-add-activations))))
 
 ;; The QueryNode is a terminal node that stores the
 ;; state that can be queried by a rule user.
