@@ -542,17 +542,20 @@
           grouped-pairs (platform/tuned-group-by (fn [pairs]
                                                    (cond
 
-                                                     (and (second pairs)
+                                                     (and (nth pairs 1)
                                                           (nth pairs 3))
                                                      :both-match
 
-                                                     :else
-                                                     :dummy))
+                                                     (nth pairs 1)
+                                                     :new-no-match))
                                                  new-old-pairs)
 
           both-match-element-pairs (for [[old-fact old-bindings new-fact new-bindings] (get grouped-pairs :both-match)]
                                      [(->Element old-fact old-bindings)
-                                      (->Element new-fact new-bindings)])]
+                                      (->Element new-fact new-bindings)])
+
+          elements-to-retract (for [[old-fact old-bindings] (get grouped-pairs :new-no-match)]
+                                (->Element old-fact old-bindings))]
 
       (update-elements
        transport
@@ -561,8 +564,12 @@
        children
        both-match-element-pairs)
 
-      ))
-  )
+      (retract-elements
+       transport
+       memory
+       listener
+       children
+       elements-to-retract))))
 
 (defrecord RootJoinNode [id condition children binding-keys]
   ILeftActivate

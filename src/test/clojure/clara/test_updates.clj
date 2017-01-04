@@ -77,3 +77,28 @@
       (is (= (query double-update cold-windy-query)
              (query double-update cold-query)
              [{:?t 15} {:?t 15}])))))
+
+(deftest test-one-fact-in-pair-fails-alpha-condition
+  (let [subzero-temp-rule (dsl/parse-rule [[ColdAndWindy (= ?t temperature) (< ?t 0)]]
+                                          (insert! (->Cold ?t)))
+
+        cold-query (dsl/parse-query [] [[Cold (= ?t temperature)]])
+
+        empty-session (mk-session [subzero-temp-rule cold-query] :cache false)]
+
+    (is (= (-> empty-session
+               (insert (->ColdAndWindy -10 -10))
+               fire-rules
+               (query cold-query))
+           [{:?t -10}])
+        "Sanity test of test rules without any updates and a subzero ColdAndWindy")
+
+    (is (= (-> empty-session
+               (insert (->ColdAndWindy -10 -10))
+               fire-rules
+               (eng/update-facts [[(->ColdAndWindy -10 -10) (->ColdAndWindy 10 10)]])
+               (query cold-query))
+           [])
+        "Test where the replacement ColdAndWindy doesn't meet the alpha condition.")))
+
+        
