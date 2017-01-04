@@ -543,19 +543,29 @@
                                                    (cond
 
                                                      (and (nth pairs 1)
-                                                          (nth pairs 3))
-                                                     :both-match
+                                                          (nth pairs 3)) :both-match
 
-                                                     (nth pairs 1)
-                                                     :new-no-match))
+                                                     (nth pairs 1) :new-no-match
+
+                                                     (nth pairs 3) :old-no-match))
+
                                                  new-old-pairs)
 
+          ;; If both the old and new facts match the alpha condition, downstream nodes may have both.  Propagate them downstream
+          ;; as a pair.
           both-match-element-pairs (for [[old-fact old-bindings new-fact new-bindings] (get grouped-pairs :both-match)]
                                      [(->Element old-fact old-bindings)
                                       (->Element new-fact new-bindings)])
 
+          ;; If the new fact doesn't match the alpha condition it should be filtered out here.  Simply perform an ordinary retraction
+          ;; of the original fact downstream.
           elements-to-retract (for [[old-fact old-bindings] (get grouped-pairs :new-no-match)]
-                                (->Element old-fact old-bindings))]
+                                (->Element old-fact old-bindings))
+
+          ;; If the old fact doesn't match the alpha condition then we know the downstream nodes won't have it in their memories.
+          ;; Simply perform an ordinary propagation of the new fact.
+          elements-to-insert (for [[_ _ new-fact new-bindings] (get grouped-pairs :old-no-match)]
+                               (->Element new-fact new-bindings))]
 
       (update-elements
        transport
@@ -569,7 +579,14 @@
        memory
        listener
        children
-       elements-to-retract))))
+       elements-to-retract)
+
+      (send-elements
+       transport
+       memory
+       listener
+       children
+       elements-to-insert))))
 
 (defrecord RootJoinNode [id condition children binding-keys]
   ILeftActivate

@@ -97,8 +97,18 @@
                (insert (->ColdAndWindy -10 -10))
                fire-rules
                (eng/update-facts [[(->ColdAndWindy -10 -10) (->ColdAndWindy 10 10)]])
+               fire-rules
                (query cold-query))
            [])
-        "Test where the replacement ColdAndWindy doesn't meet the alpha condition.")))
+        "Test where the replacement ColdAndWindy doesn't meet the alpha condition.")
+
+    (is (= (-> empty-session
+               (insert (->ColdAndWindy 10 10))
+               fire-rules
+               (eng/update-facts [[(->ColdAndWindy 10 10) (->ColdAndWindy -10 -10)]])
+               fire-rules
+               (query cold-query))
+           [{:?t -10}])
+        "Test where the original ColdAndWindy doesn't meet the alpha condition.")))
 
         
