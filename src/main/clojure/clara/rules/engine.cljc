@@ -121,10 +121,7 @@
   (retract-elements [transport memory listener nodes elements])
   (retract-tokens [transport memory listener nodes tokens])
   (update-elements [transport memory listener nodes element-pairs])
-  (update-tokens [transport memory listener nodes tokens])
-  
-
-  )
+  (update-tokens [transport memory listener nodes tokens]))
 
 (defprotocol IUpdate
   (right-update [node element-pairs memory transport listener])
