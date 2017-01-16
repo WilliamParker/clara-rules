@@ -491,16 +491,15 @@
   IUpdate
   (left-update [node token-pairs memory transport listener]
 
-    (let [to-add (persistent! (reduce (fn [existing [old-token new-token]]
-                                        (let [old-bindings (select-keys (:bindings old-token) param-keys)
-                                              removed (mem/remove-tokens! memory node old-bindings [old-token])]
-                                          (if (not-empty removed)
-                                            (conj! existing new-token)
-                                            existing)))
-                                      (transient [])
-                                      token-pairs))]
-      (doseq [new-token to-add]
-        (mem/add-tokens! memory node (select-keys (:bindings new-token) param-keys) [new-token])))))
+    (doseq [[old-token new-token] token-pairs]
+      (mem/remove-tokens! memory
+                          node
+                          (select-keys (:bindings old-token) param-keys)
+                          [old-token])
+      (mem/add-tokens! memory
+                       node
+                       (select-keys (:bindings old-token) param-keys)
+                       [new-token]))))
 
 ;; Record representing alpha nodes in the Rete network,
 ;; each of which evaluates a single condition and
