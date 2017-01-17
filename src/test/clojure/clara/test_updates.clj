@@ -91,8 +91,6 @@
 
         empty-session (mk-session [subzero-temp-rule cold-query] :cache false)]
 
-    (def s empty-session)
-
     (is (= (-> empty-session
                (insert (->ColdAndWindy -10 -10))
                fire-rules
@@ -128,6 +126,8 @@
         cold-query (dsl/parse-query [] [[Cold (= ?t temperature)]])
 
         empty-session (mk-session [cold-temp-rule cold-query] :cache false)]
+
+    (def s empty-session)
 
     (reset! test-unused-field-changes-simple-hash-join-counter 0)
 

@@ -330,6 +330,9 @@
 
   (left-retract [node join-bindings tokens memory transport listener]
 
+    (println "ProductionNode left-retract tokens: " tokens)
+    (println "ProductionNode left-retract tokens meta: " (mapv meta tokens))
+
     (l/left-retract! listener node tokens)
 
     ;; Remove any tokens to avoid future rule execution on retracted items.
@@ -354,6 +357,10 @@
           ;; Now use each token that was not used to remove a pending activation to remove
           ;; the logical insertions from a previous activation if the truth maintenance system
           ;; has a matching previous activation.
+
+          _ (println "Unremoved tokens: " unremoved-tokens)
+
+          _ (println "Unremoved token metadata: " (mapv meta unremoved-tokens))
           token-insertion-tuples (mem/remove-insertions! memory node unremoved-tokens)]
 
       (let [insertions (into []
@@ -516,7 +523,7 @@
      children
      (for [{:keys [fact bindings] :as element} elements]
        (vary-meta (->Token [[fact (:id node)]] bindings)
-                  assoc ::update-id (-> element meta :update-id)))))
+                  assoc ::update-id (-> element meta ::update-id)))))
 
   (right-retract [node join-bindings elements memory transport listener]
 
@@ -530,7 +537,7 @@
      children
      (for [{:keys [fact bindings] :as element} (mem/remove-elements! memory node join-bindings elements)]
        (vary-meta (->Token [[fact (:id node)]] bindings)
-                  assoc ::update-id (-> element meta :update-id))))))
+                  assoc ::update-id (-> element meta ::update-id))))))
 
 ;; Record for the join node, a type of beta node in the rete network. This node performs joins
 ;; between left and right activations, creating new tokens when joins match and sending them to
@@ -551,7 +558,7 @@
            :let [fact (:fact element)
                  fact-binding (:bindings element)]]
        (vary-meta (->Token (conj (:matches token) [fact id]) (conj fact-binding (:bindings token)))
-                  assoc ::update-id (-> token meta :update-id))))) 
+                  assoc ::update-id (-> token meta ::update-id))))) 
 
   (left-retract [node join-bindings tokens memory transport listener]
     (l/left-retract! listener node tokens)
@@ -565,7 +572,7 @@
            :let [fact (:fact element)
                  fact-bindings (:bindings element)]]
        (vary-meta (->Token (conj (:matches token) [fact id]) (conj fact-bindings (:bindings token)))
-                  assoc ::update-id (-> token meta :update-id)))))
+                  assoc ::update-id (-> token meta ::update-id)))))
 
   (get-join-keys [node] binding-keys)
 
@@ -583,7 +590,7 @@
      (for [token (mem/get-tokens memory node join-bindings)
            {:keys [fact bindings] :as element} elements]
        (vary-meta (->Token (conj (:matches token) [fact id]) (conj (:bindings token) bindings))
-                  assoc ::update-id (-> element meta :update-id)))))
+                  assoc ::update-id (-> element meta ::update-id)))))
 
   (right-retract [node join-bindings elements memory transport listener]
     (l/right-retract! listener node elements)
@@ -595,7 +602,7 @@
      (for [{:keys [fact bindings] :as element} (mem/remove-elements! memory node join-bindings elements)
            token (mem/get-tokens memory node join-bindings)]
        (vary-meta (->Token (conj (:matches token) [fact id]) (conj (:bindings token) bindings))
-                  assoc ::update-id (-> element meta :update-id))))))
+                  assoc ::update-id (-> element meta ::update-id))))))
 
 
 (defrecord ExpressionJoinNode [id condition join-filter-fn children binding-keys]
@@ -1703,6 +1710,10 @@
         (doseq [[alpha-roots fact-group] (get-alphas-fn removed-facts)
                 root alpha-roots]
           (alpha-retract-update root fact-group transient-memory transport transient-listener))
+
+        (println "Pending update retractions: " *pending-update-retractions*)
+
+        (def dbg-list (into [] *pending-update-retractions*))
 
         (doseq [[alpha-roots fact-group] (get-alphas-fn added-facts)
                 root alpha-roots]
