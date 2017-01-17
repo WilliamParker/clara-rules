@@ -304,13 +304,17 @@
                                (persistent! (reduce (fn [unmatched-tokens
                                                          token]
                                                       (let [matching-tuple (some (fn [insertion-tuple]
-                                                                                   (and (= id
-                                                                                           (-> insertion-tuple first :id))
-                                                                                        (= (-> token meta ::update-id)
-                                                                                           (-> insertion-tuple second meta ::update-id))
-                                                                                        (= (-> token :bindings (select-keys rhs-bindings))
-                                                                                           (-> insertion-tuple second :bindings rhs-bindings))))
-                                                                                 *pending-update-retractions*)]
+                                                                                   (when (and (= id
+                                                                                                 (-> insertion-tuple first :id))
+                                                                                              (= (-> token meta ::update-id)
+                                                                                                 (-> insertion-tuple second meta ::update-id))
+                                                                                              (= (-> token :bindings (select-keys rhs-bindings))
+                                                                                                 (-> insertion-tuple second :bindings (select-keys rhs-bindings))))
+                                                                                     insertion-tuple))
+                                                                                 *pending-update-retractions*)
+                                                            _ (println "Matching tuple token: " token)
+                                                            _ (println "Matching tuple match: " matching-tuple)
+                                                            ]
                                                         (if matching-tuple
                                                           (do (mem/list-remove! *pending-update-retractions* matching-tuple)
                                                               (mem/add-insertions! memory node token (nth matching-tuple 2))
