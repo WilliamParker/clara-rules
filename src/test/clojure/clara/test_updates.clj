@@ -117,3 +117,33 @@
                (query cold-query))
            [{:?t -10}])
         "Test where the original ColdAndWindy doesn't meet the alpha condition.")))
+
+(def ^:private test-unused-field-changes-simple-hash-join-counter (atom 0))
+(deftest test-unused-field-changes-simple-hash-join
+  (let [cold-temp-rule (dsl/parse-rule [[Temperature (= ?t temperature) (< ?t 0)]]
+                                       (do
+                                         (swap! test-unused-field-changes-simple-hash-join-counter inc)
+                                         (insert! (->Cold ?t))))
+
+        cold-query (dsl/parse-query [] [[Cold (= ?t temperature)]])
+
+        empty-session (mk-session [cold-temp-rule cold-query] :cache false)]
+
+    (reset! test-unused-field-changes-simple-hash-join-counter 0)
+
+    (is (= (-> empty-session
+               (insert (->Temperature -10 "MCI"))
+               fire-rules
+               (eng/update-facts [[(->Temperature -10 "MCI") (->Temperature -10 "LHR")]])
+               fire-rules
+               (query cold-query))
+           [{:?t -10}])
+        "Check for expect rule outcome")
+
+    (is (= @test-unused-field-changes-simple-hash-join-counter 1)
+        "Check that we do not have excessive RHS activations")))
+
+    
+           
+
+                                        
