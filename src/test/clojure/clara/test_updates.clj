@@ -39,7 +39,7 @@
                [{:?t 15}])
             (str "Update of a fact that is present in the session" test-type))
 
-        (is (= (query update-absent-fact cold-windy-query)
+        (is (= (frequencies (query update-absent-fact cold-windy-query))
                (-> update-absent-fact
                    fire-rules
                    (query cold-query)
@@ -70,15 +70,18 @@
 
       (is (= (frequencies (query single-update cold-windy-query))
              (frequencies (query single-update cold-query))
-             (frequencies [{:?t 15} {:?t 10}])))
+             (frequencies [{:?t 15} {:?t 10}]))
+          "One time update of one fact")
 
       (is (= (query subsequent-update cold-windy-query)
              (query subsequent-update cold-query)
-             [{:?t 15} {:?t 15}]))
+             [{:?t 15} {:?t 15}])
+          "Two distinct updates of one fact each")
 
       (is (= (query double-update cold-windy-query)
              (query double-update cold-query)
-             [{:?t 15} {:?t 15}])))))
+             [{:?t 15} {:?t 15}])
+          "One time update of both facts"))))
 
 (deftest test-one-fact-in-pair-fails-alpha-condition
   (let [subzero-temp-rule (dsl/parse-rule [[ColdAndWindy (= ?t temperature) (< ?t 0)]]
