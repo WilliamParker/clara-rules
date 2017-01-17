@@ -72,6 +72,8 @@
   ;; Retracts a fact.
   (retract [session fact])
 
+  (update-facts [session fact-pairs])
+
   ;; Fires pending rules and returns a new session where they are in a fired state.
   (fire-rules [session])
 
@@ -1680,6 +1682,45 @@
                      get-alphas-fn
                      update-id-counter)))
 
+  (update-facts [session fact-pairs]
+    (let [transient-memory (mem/to-transient memory)
+          transient-listener (l/to-transient listener)
+          removed-facts (into []
+                              (map-indexed (fn [id [fact _]]
+                                             (->UpdateFact fact (-> id (+ update-id-counter 1)))))
+                              fact-pairs)
+
+          added-facts (into []
+                            (map-indexed (fn [id [_ fact]]
+                                           (->UpdateFact fact (-> id (+ update-id-counter 1)))))
+                            fact-pairs)
+          retractions-list (java.util.LinkedList.)]
+      
+      (binding [*pending-update-retractions* retractions-list]
+        
+        (doseq [[alpha-roots fact-group] (get-alphas-fn removed-facts)
+                root alpha-roots]
+          (alpha-retract-update root fact-group transient-memory transport transient-listener))
+
+        (doseq [[alpha-roots fact-group] (get-alphas-fn added-facts)
+                root alpha-roots]
+          (alpha-activate-update root fact-group transient-memory transport transient-listener)))
+
+      (binding [*pending-external-retractions* (atom (into [] retractions-list))]
+        (external-retract-loop get-alphas-fn transient-memory transport transient-listener))
+
+      (LocalSession. rulebase
+                     (mem/to-persistent! transient-memory)
+                     transport
+                     (l/to-persistent! transient-listener)
+                     get-alphas-fn
+                     (+ update-id-counter (count fact-pairs)))
+
+
+
+
+      ))
+  
   (fire-rules [session]
 
     (let [transient-memory (mem/to-transient memory)
