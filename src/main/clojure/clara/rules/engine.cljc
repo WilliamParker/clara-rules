@@ -330,42 +330,47 @@
           ;; Now use each token that was not used to remove a pending activation to remove
           ;; the logical insertions from a previous activation if the truth maintenance system
           ;; has a matching previous activation.
-          token-insertion-map (mem/remove-insertions! memory node unremoved-tokens)]
+          token-insertion-tuples (mem/remove-insertions! memory node unremoved-tokens)]
 
-      (when-let [insertions (seq (apply concat (vals token-insertion-map)))]
-        ;; If there is current session with rules firing, add these items to the queue
-        ;; to be retracted so they occur in the same order as facts being inserted.
-        (cond
+      (let [insertions (into []
+                             (comp
+                              (map second)
+                              cat)
+                             token-insertion-tuples)]
+        (when (not-empty insertions)
+          ;; If there is current session with rules firing, add these items to the queue
+          ;; to be retracted so they occur in the same order as facts being inserted.
+          (cond
 
-          ;; Both logical retractions resulting from rule network activity and manual RHS retractions
-          ;; expect *current-session* to be bound since both happen in the context of a fire-rules call.
-          *current-session*
-          ;; Retract facts that have become untrue, unless they became untrue
-          ;; because of an activation of the current rule that is :no-loop
-          (when (or (not (get-in production [:props :no-loop]))
-                    (not (= production (get-in *rule-context* [:node :production]))))
+            ;; Both logical retractions resulting from rule network activity and manual RHS retractions
+            ;; expect *current-session* to be bound since both happen in the context of a fire-rules call.
+            *current-session*
+            ;; Retract facts that have become untrue, unless they became untrue
+            ;; because of an activation of the current rule that is :no-loop
+            (when (or (not (get-in production [:props :no-loop]))
+                      (not (= production (get-in *rule-context* [:node :production]))))
+              (do
+                ;; Notify the listener of logical retractions.
+                ;; Note that this notification happens immediately, while the
+                ;; alpha-retract notification on matching alpha nodes will happen when the
+                ;; retraction is actually removed from the buffer and executed in the rules network.
+                (doseq [[token token-insertions] token-insertion-tuples]
+                  (l/retract-facts-logical! listener node token token-insertions))
+                (retract-facts! insertions)))
+
+            ;; Any session implementation is required to bind this during external retractions and insertions.
+            *pending-external-retractions*
             (do
-              ;; Notify the listener of logical retractions.
-              ;; Note that this notification happens immediately, while the
-              ;; alpha-retract notification on matching alpha nodes will happen when the
-              ;; retraction is actually removed from the buffer and executed in the rules network.
-              (doseq [[token token-insertions] token-insertion-map]
+              (doseq [[token token-insertions] token-insertion-tuples]
                 (l/retract-facts-logical! listener node token token-insertions))
-              (retract-facts! insertions)))
+              (swap! *pending-external-retractions* into insertions))
 
-          ;; Any session implementation is required to bind this during external retractions and insertions.
-          *pending-external-retractions*
-          (do
-            (doseq [[token token-insertions] token-insertion-map]
-              (l/retract-facts-logical! listener node token token-insertions))
-            (swap! *pending-external-retractions* into insertions))
-
-          :else
-          (throw (ex-info (str "Attempting to retract from a ProductionNode when neither *current-session* nor "
-                               "*pending-external-retractions* is bound is illegal.")
-                          {:node node
-                           :join-bindings join-bindings
-                           :tokens tokens}))))))
+            :else
+            (throw (ex-info (str "Attempting to retract from a ProductionNode when neither *current-session* nor "
+                                 "*pending-external-retractions* is bound is illegal.")
+                            {:node node
+                             :join-bindings join-bindings
+                             :tokens tokens})))))))
 
   (get-join-keys [node] [])
 

@@ -701,7 +701,7 @@
           [results
            new-token-facts-map]
 
-          (loop [results (transient {})
+          (loop [results (transient [])
                  token-map (transient token-facts-map)
                  to-remove tokens]
             (if-let [head-token (first to-remove)]
@@ -712,9 +712,8 @@
                       [removed-facts & remaining-facts] token-insertions
                       removed-insertion-map (if (not-empty remaining-facts)
                                               (assoc! token-map head-token remaining-facts)
-                                              (dissoc! token-map head-token))
-                      prev-token-result (get results head-token [])]
-                  (recur (assoc! results head-token (into prev-token-result removed-facts))
+                                              (dissoc! token-map head-token))]
+                  (recur (conj! results [head-token removed-facts])
                          removed-insertion-map
                          (rest to-remove)))
                 ;; If the token isn't present in the insertions just try the next one.
