@@ -1525,7 +1525,7 @@
                                (fn [fact]
                                  (if (instance? ISystemFact fact)
                                    ;; Internal system types always use Clojure's type mechanism.
-                                   (type fact)
+                                   (eng/system-fact-type fact fact-type-fn)
                                    ;; All other types defer to the provided function.
                                    (fact-type-fn fact))))
 

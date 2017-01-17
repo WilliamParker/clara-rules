@@ -36,24 +36,13 @@
 ;; if that object descends from a particular object through
 ;; Clojure's hierarchy as determined by the isa? function.
 ;; See Issue 239 for more details.
-#?(:clj
-    (do
-      ;; A marker interface to identify internal facts.
-      (definterface ISystemFact)
-      (defrecord NegationResult [gen-rule-name]
-        ISystemFact))
+(defprotocol ISystemFact
+  (system-fact-type [this fact-type-fn]))
 
-    :cljs
-    (do
-      (defrecord NegationResult [gen-rule-name])
-      ;; Make NegationResult a "system type" so that NegationResult
-      ;; facts are special-cased when matching productions. This serves
-      ;; the same purpose as implementing the ISystemFact Java interface
-      ;; on the Clojure version of NegationResult.
-      ;; ClojureScript does not have definterface; if we experience performance
-      ;; problems in ClojureScript similar to those on the JVM that are
-      ;; described in issue 239 we can investigate a similar strategy in JavaScript.
-      (derive NegationResult ::system-type)))
+(defrecord NegationResult [gen-rule-name]
+  ISystemFact
+  (system-fact-type [this _]
+    NegationResult))
 
 ;; Schema for the structure returned by the components
 ;; function on the session protocol.
@@ -161,7 +150,9 @@
 ;; Protocol for activation of Rete alpha nodes.
 (defprotocol IAlphaActivate
   (alpha-activate [node facts memory transport listener])
-  (alpha-retract [node facts memory transport listener]))
+  (alpha-activate-update [node facts memory transport listener])
+  (alpha-retract [node facts memory transport listener])
+  (alpha-retract-update [node facts memory transport listener]))
 
 ;; Record indicating pending insertion or removal of a sequence of facts.
 (defrecord PendingUpdate [type facts])
@@ -402,12 +393,25 @@
                                [fact bindings])]
       (l/alpha-activate! listener node (map first fact-binding-pairs))
       (send-elements
-        transport
-        memory
-        listener
-        children
-        (for [[fact bindings] fact-binding-pairs]
-          (->Element fact bindings)))))
+       transport
+       memory
+       listener
+       children
+       (for [[fact bindings] fact-binding-pairs]
+         (->Element fact bindings)))))
+
+  (alpha-activate-update [node facts memory transport listener]
+    (let [fact-binding-pairs (for [fact facts
+                                   :let [bindings (activation fact env)] :when bindings] ; FIXME: add env.
+                               [fact bindings])]
+      (l/alpha-activate! listener node (map first fact-binding-pairs))
+      (send-elements
+       transport
+       memory
+       listener
+       children
+       (for [[fact bindings] fact-binding-pairs]
+         (->Element fact bindings)))))
 
   (alpha-retract [node facts memory transport listener]
     (let [fact-binding-pairs (for [fact facts
@@ -415,12 +419,25 @@
                                [fact bindings])]
       (l/alpha-retract! listener node (map first fact-binding-pairs))
       (retract-elements
-        transport
-        memory
-        listener
-        children
-        (for [[fact bindings] fact-binding-pairs]
-          (->Element fact bindings))))))
+       transport
+       memory
+       listener
+       children
+       (for [[fact bindings] fact-binding-pairs]
+         (->Element fact bindings)))))
+
+  (alpha-retract-update [node facts memory transport listener]
+    (let [fact-binding-pairs (for [fact facts
+                                   :let [bindings (activation fact env)] :when bindings] ; FIXME: add env.
+                               [fact bindings])]
+      (l/alpha-retract! listener node (map first fact-binding-pairs))
+      (retract-elements
+       transport
+       memory
+       listener
+       children
+       (for [[fact bindings] fact-binding-pairs]
+         (->Element fact bindings))))))
 
 (defrecord RootJoinNode [id condition children binding-keys]
   ILeftActivate
