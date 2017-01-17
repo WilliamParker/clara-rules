@@ -131,17 +131,32 @@
 
     (reset! test-unused-field-changes-simple-hash-join-counter 0)
 
-    (is (= (-> empty-session
-               (insert (->Temperature -10 "MCI"))
-               fire-rules
-               (eng/update-facts [[(->Temperature -10 "MCI") (->Temperature -10 "LHR")]])
-               fire-rules
-               (query cold-query))
-           [{:?t -10}])
-        "Check for expect rule outcome")
+    (let [initial-inserted (-> empty-session
+                               (insert (->Temperature -10 "MCI"))
+                               fire-rules)]
 
-    (is (= @test-unused-field-changes-simple-hash-join-counter 1)
-        "Check that we do not have excessive RHS activations")))
+      (is (= (query initial-inserted cold-query)
+             [{:?t -10}])
+          "Sanity test that the Cold fact is produced without any updates")
+
+      (is (= @test-unused-field-changes-simple-hash-join-counter 1)
+          "Sanity test that the counter is incremented by the initial Cold insertion")
+
+      (let [updated-session (-> initial-inserted
+                                (eng/update-facts [[(->Temperature -10 "MCI") (->Temperature -10 "LHR")]])
+                                fire-rules)]
+        (is (= (query updated-session cold-query)
+               [{:?t -10}])
+            "Check for expect rule outcome after update")
+
+        (is (= @test-unused-field-changes-simple-hash-join-counter 1)
+            "Check that we do not have additional RHS activations from the update")
+
+        (is (empty? (-> updated-session
+                        (retract (->Temperature -10 "LHR"))
+                        fire-rules
+                        (query cold-query)))
+            "Validate that future truth maintenance based on the updated fact works")))))
 
     
            
