@@ -117,7 +117,7 @@
      (or (nil? coll) (.isEmpty coll))))
 
 #?(:clj
-   (defn- list-remove!
+   (defn list-remove!
      "Removes the item, to-remove, from the given list, lst.  If it is found and removed,
       returns true.  Otherwise returns false.  Only removes the first element in the list
       that is equal to to-remove.  Equality is done based on the given eq-pred function.

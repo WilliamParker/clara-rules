@@ -298,7 +298,27 @@
       ;; can perform retractions if they become false.
       (mem/add-tokens! memory node join-bindings tokens)
 
-      (let [activations (for [token tokens]
+      (let [remaining-tokens (if *pending-update-retractions*
+                               (persistent! (reduce (fn [unmatched-tokens
+                                                         token]
+                                                      (let [matching-tuple (some (fn [insertion-tuple]
+                                                                                   (and (= id
+                                                                                           (-> insertion-tuple first :id))
+                                                                                        (= (-> token meta ::update-id)
+                                                                                           (-> insertion-tuple second meta ::update-id))
+                                                                                        (= (-> token :bindings select-keys rhs-bindings)
+                                                                                           (-> insertion-tuple second :bindings rhs-bindings))))
+                                                                                 *pending-update-retractions*)]
+                                                        (if matching-tuple
+                                                          (do (mem/list-remove! *pending-update-retractions* matching-tuple)
+                                                              (mem/add-insertions! memory node token (nth matching-tuple 2))
+                                                              unmatched-tokens)
+                                                          (conj! unmatched-tokens token))))
+                                                    (transient [])
+                                                    tokens))
+                               tokens)
+
+            activations (for [token remaining-tokens]
                           (->Activation node token))]
 
         (l/add-activations! listener node activations)
@@ -1618,7 +1638,7 @@
         (when (flush-updates *current-session*)
           (recur (mem/next-activation-group transient-memory) next-group))))))
 
-(deftype LocalSession [rulebase memory transport listener get-alphas-fn]
+(deftype LocalSession [rulebase memory transport listener get-alphas-fn update-id-counter]
   ISession
   (insert [session facts]
     (let [transient-memory (mem/to-transient memory)
@@ -1640,7 +1660,8 @@
                      (mem/to-persistent! transient-memory)
                      transport
                      (l/to-persistent! transient-listener)
-                     get-alphas-fn)))
+                     get-alphas-fn
+                     update-id-counter)))
 
   (retract [session facts]
 
@@ -1656,7 +1677,8 @@
                      (mem/to-persistent! transient-memory)
                      transport
                      (l/to-persistent! transient-listener)
-                     get-alphas-fn)))
+                     get-alphas-fn
+                     update-id-counter)))
 
   (fire-rules [session]
 
@@ -1673,7 +1695,8 @@
                      (mem/to-persistent! transient-memory)
                      transport
                      (l/to-persistent! transient-listener)
-                     get-alphas-fn)))
+                     get-alphas-fn
+                     update-id-counter)))
 
   ;; TODO: queries shouldn't require the use of transient memory.
   (query [session query params]
@@ -1719,7 +1742,8 @@
                  (if (> (count listeners) 0)
                    (l/delegating-listener listeners)
                    l/default-listener)
-                 get-alphas-fn))
+                 get-alphas-fn
+                 0))
 
 (defn local-memory
   "Returns a local, in-process working memory."
