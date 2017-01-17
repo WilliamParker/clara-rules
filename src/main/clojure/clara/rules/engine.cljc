@@ -170,6 +170,8 @@
 ;; The value is expected to be an atom holding such facts.
 (def ^:dynamic *pending-external-retractions* nil)
 
+(def ^:dynamic *pending-update-retractions* nil)
+
 ;; The token that triggered a rule to fire.
 (def ^:dynamic *rule-context* nil)
 
@@ -364,6 +366,13 @@
               (doseq [[token token-insertions] token-insertion-tuples]
                 (l/retract-facts-logical! listener node token token-insertions))
               (swap! *pending-external-retractions* into insertions))
+
+            *pending-update-retractions*
+            (.addAll ^java.util.List (mapv (fn [[token facts]]
+                                             [node
+                                              token
+                                              facts])
+                                           token-insertion-tuples))
 
             :else
             (throw (ex-info (str "Attempting to retract from a ProductionNode when neither *current-session* nor "
