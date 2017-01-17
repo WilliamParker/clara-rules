@@ -320,6 +320,8 @@
                                                     tokens))
                                tokens)
 
+            _ (println "Remaining tokens: " tokens)
+
             activations (for [token remaining-tokens]
                           (->Activation node token))]
 
@@ -329,6 +331,9 @@
         (mem/add-activations! memory production activations))))
 
   (left-retract [node join-bindings tokens memory transport listener]
+
+    (println "Retracting tokens: " tokens)
+    
 
     (l/left-retract! listener node tokens)
 
@@ -469,6 +474,7 @@
          (->Element fact bindings)))))
 
   (alpha-retract-update [node facts memory transport listener]
+    (println "Alpha retract update: " facts)
     (let [fact-binding-tuples (for [wrapped-fact facts
                                     :let [fact (:base-fact wrapped-fact)
                                           bindings (activation fact env)] :when bindings] ; FIXME: add env.
@@ -517,6 +523,8 @@
                   assoc ::update-id (-> element meta :update-id)))))
 
   (right-retract [node join-bindings elements memory transport listener]
+
+    (println "Root join node right retract: " elements)
 
     (l/right-retract! listener node elements)
 
@@ -1694,7 +1702,13 @@
                             (map-indexed (fn [id [_ fact]]
                                            (->UpdateFact fact (-> id (+ update-id-counter 1)))))
                             fact-pairs)
-          retractions-list (java.util.LinkedList.)]
+          retractions-list (java.util.LinkedList.)
+
+          _ (println "added facts: " added-facts)
+
+          _ (println "retracted facts: " removed-facts)]
+
+      (def removed-facts removed-facts)
       
       (binding [*pending-update-retractions* retractions-list]
         
@@ -1714,12 +1728,7 @@
                      transport
                      (l/to-persistent! transient-listener)
                      get-alphas-fn
-                     (+ update-id-counter (count fact-pairs)))
-
-
-
-
-      ))
+                     (+ update-id-counter (count fact-pairs)))))
   
   (fire-rules [session]
 

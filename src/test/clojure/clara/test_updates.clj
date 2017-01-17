@@ -126,21 +126,23 @@
 
         empty-session (mk-session [subzero-temp-rule cold-query] :cache false)]
 
-        (is (= (-> empty-session
+    (def s empty-session)
+
+    ;; (is (= (-> empty-session
+    ;;            (insert (->ColdAndWindy -10 -10))
+    ;;            fire-rules
+    ;;            (query cold-query))
+    ;;        [{:?t -10}])
+    ;;     "Sanity test of test rules without any updates and a subzero ColdAndWindy")
+
+    (is (= (-> empty-session
                (insert (->ColdAndWindy -10 -10))
                fire-rules
+               (eng/update-facts [[(->ColdAndWindy -10 -10) (->ColdAndWindy 10 10)]])
+               fire-rules
                (query cold-query))
-               [{:?t -10}])
-            "Sanity test of test rules without any updates and a subzero ColdAndWindy")
-
-        (is (= (-> empty-session
-                   (insert (->ColdAndWindy -10 -10))
-                   fire-rules
-                   (eng/update-facts [[(->ColdAndWindy -10 -10) (->ColdAndWindy 10 10)]])
-                   fire-rules
-                   (query cold-query))
-               [])
-            "Test where the replacement ColdAndWindy doesn't meet the alpha condition.")
+           [])
+        "Test where the replacement ColdAndWindy doesn't meet the alpha condition.")
 
 
     ))

@@ -1520,14 +1520,12 @@
         ;; we must use a specialized grouping function
         ;; that handles internal control types that may not
         ;; follow the provided type function.
-        wrapped-fact-type-fn (if (= fact-type-fn type)
-                               type
-                               (fn [fact]
-                                 (if (instance? ISystemFact fact)
-                                   ;; Internal system types always use Clojure's type mechanism.
-                                   (eng/system-fact-type fact fact-type-fn)
-                                   ;; All other types defer to the provided function.
-                                   (fact-type-fn fact))))
+        wrapped-fact-type-fn (fn [fact]
+                               (if (instance? ISystemFact fact)
+                                 ;; Internal system types always use Clojure's type mechanism.
+                                 (eng/system-fact-type fact fact-type-fn)
+                                 ;; All other types defer to the provided function.
+                                 (fact-type-fn fact)))
 
         ;; Wrap the ancestors-fn so that we don't send internal facts such as NegationResult
         ;; to user-provided productions.  Note that this work is memoized inside fact-type->roots.
