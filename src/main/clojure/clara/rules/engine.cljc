@@ -395,11 +395,11 @@
               (swap! *pending-external-retractions* into insertions))
 
             *pending-update-retractions*
-            (.addAll ^java.util.List (mapv (fn [[token facts]]
-                                             [node
-                                              token
-                                              facts])
-                                           token-insertion-tuples))
+            (.addAll ^java.util.List *pending-update-retractions* (mapv (fn [[token facts]]
+                                                                            [node
+                                                                             token
+                                                                             facts])
+                                                                          token-insertion-tuples))
 
             :else
             (throw (ex-info (str "Attempting to retract from a ProductionNode when neither *current-session* nor "
@@ -1707,8 +1707,6 @@
           _ (println "added facts: " added-facts)
 
           _ (println "retracted facts: " removed-facts)]
-
-      (def removed-facts removed-facts)
       
       (binding [*pending-update-retractions* retractions-list]
         
