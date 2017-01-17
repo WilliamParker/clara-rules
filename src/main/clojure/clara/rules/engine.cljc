@@ -308,7 +308,7 @@
                                                                                            (-> insertion-tuple first :id))
                                                                                         (= (-> token meta ::update-id)
                                                                                            (-> insertion-tuple second meta ::update-id))
-                                                                                        (= (-> token :bindings select-keys rhs-bindings)
+                                                                                        (= (-> token :bindings (select-keys rhs-bindings))
                                                                                            (-> insertion-tuple second :bindings rhs-bindings))))
                                                                                  *pending-update-retractions*)]
                                                         (if matching-tuple
@@ -320,8 +320,6 @@
                                                     tokens))
                                tokens)
 
-            _ (println "Remaining tokens: " tokens)
-
             activations (for [token remaining-tokens]
                           (->Activation node token))]
 
@@ -331,9 +329,6 @@
         (mem/add-activations! memory production activations))))
 
   (left-retract [node join-bindings tokens memory transport listener]
-
-    (println "Retracting tokens: " tokens)
-    
 
     (l/left-retract! listener node tokens)
 
@@ -461,6 +456,7 @@
          (with-meta (->Element fact bindings) {::update-id update-id})))))
 
   (alpha-retract [node facts memory transport listener]
+    
     (let [fact-binding-pairs (for [fact facts
                                    :let [bindings (activation fact env)] :when bindings] ; FIXME: add env.
                                [fact bindings])]
@@ -474,7 +470,7 @@
          (->Element fact bindings)))))
 
   (alpha-retract-update [node facts memory transport listener]
-    (println "Alpha retract update: " facts)
+
     (let [fact-binding-tuples (for [wrapped-fact facts
                                     :let [fact (:base-fact wrapped-fact)
                                           bindings (activation fact env)] :when bindings] ; FIXME: add env.
@@ -523,8 +519,6 @@
                   assoc ::update-id (-> element meta :update-id)))))
 
   (right-retract [node join-bindings elements memory transport listener]
-
-    (println "Root join node right retract: " elements)
 
     (l/right-retract! listener node elements)
 
@@ -1702,11 +1696,7 @@
                             (map-indexed (fn [id [_ fact]]
                                            (->UpdateFact fact (-> id (+ update-id-counter 1)))))
                             fact-pairs)
-          retractions-list (java.util.LinkedList.)
-
-          _ (println "added facts: " added-facts)
-
-          _ (println "retracted facts: " removed-facts)]
+          retractions-list (java.util.LinkedList.)]
       
       (binding [*pending-update-retractions* retractions-list]
         
@@ -1718,7 +1708,12 @@
                 root alpha-roots]
           (alpha-activate-update root fact-group transient-memory transport transient-listener)))
 
-      (binding [*pending-external-retractions* (atom (into [] retractions-list))]
+      (binding [*pending-external-retractions* (atom (into []
+                                                           (comp
+                                                            (map (fn [t] (nth t 2)))
+                                                            cat)
+                                                           retractions-list))]
+
         (external-retract-loop get-alphas-fn transient-memory transport transient-listener))
 
       (LocalSession. rulebase
