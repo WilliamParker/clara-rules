@@ -73,6 +73,12 @@
                         ;; Function that takes facts and determines what alpha nodes they match.
                         get-alphas-fn])
 
+(defn- is-variable?
+  "Returns true if the given expression is a binding variable (a symbol prefixed by ?)"
+  [expr]
+  (and (symbol? expr)
+       (.startsWith (name expr) "?")))
+
 (def ^:private reflector
   "For some reason (bug?) the default reflector doesn't use the
    Clojure dynamic class loader, which prevents reflecting on
@@ -551,9 +557,8 @@
         process-form (fn [form]
                        (when (and (seq? form)
                                   (not (equality-expression? form))
-                                  (some (fn [sym] (and (symbol? sym)
-                                                      (.startsWith (name sym) "?")
-                                                      (not (previously-bound sym))))
+                                  (some (fn [sym] (and (is-variable? sym)
+                                                       (not (previously-bound sym))))
                                         (flatten-expression form)))
 
                          (reset! found-complex true))
@@ -585,12 +590,6 @@
                    :else :test)]
 
     node-type))
-
-(defn- is-variable?
-  "Returns true if the given expression is a variable (a symbol prefixed by ?)"
-  [expr]
-  (and (symbol? expr)
-       (.startsWith (name expr) "?")))
 
 (defn- extract-exists
   "Converts :exists operations into an accumulator to detect
@@ -1165,7 +1164,6 @@
                     {:node-type :query
                      :query production}))))))
 
-
 (sc/defn to-beta-graph :- schema/BetaGraph
 
   "Produces a description of the beta network."
@@ -1351,7 +1349,8 @@
                                                     :msg "compiling production node"}}
                             (:ns-name production) (assoc #'*ns* (the-ns (:ns-name production))))
              (compile-expr id
-                           action-expr)))
+                           action-expr))
+           (-> production :rhs variables-as-keywords))
           {:action-expr action-expr}))
 
       :query
