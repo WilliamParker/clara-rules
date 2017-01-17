@@ -311,10 +311,7 @@
                                                                                               (= (-> token :bindings (select-keys rhs-bindings))
                                                                                                  (-> insertion-tuple second :bindings (select-keys rhs-bindings))))
                                                                                      insertion-tuple))
-                                                                                 *pending-update-retractions*)
-                                                            _ (println "Matching tuple token: " token)
-                                                            _ (println "Matching tuple match: " matching-tuple)
-                                                            ]
+                                                                                 *pending-update-retractions*)]
                                                         (if matching-tuple
                                                           (do (mem/list-remove! *pending-update-retractions* matching-tuple)
                                                               (mem/add-insertions! memory node token (nth matching-tuple 2))
@@ -333,9 +330,6 @@
         (mem/add-activations! memory production activations))))
 
   (left-retract [node join-bindings tokens memory transport listener]
-
-    (println "ProductionNode left-retract tokens: " tokens)
-    (println "ProductionNode left-retract tokens meta: " (mapv meta tokens))
 
     (l/left-retract! listener node tokens)
 
@@ -362,9 +356,6 @@
           ;; the logical insertions from a previous activation if the truth maintenance system
           ;; has a matching previous activation.
 
-          _ (println "Unremoved tokens: " unremoved-tokens)
-
-          _ (println "Unremoved token metadata: " (mapv meta unremoved-tokens))
           token-insertion-tuples (mem/remove-insertions! memory node unremoved-tokens)]
 
       (let [insertions (into []
@@ -1714,10 +1705,6 @@
         (doseq [[alpha-roots fact-group] (get-alphas-fn removed-facts)
                 root alpha-roots]
           (alpha-retract-update root fact-group transient-memory transport transient-listener))
-
-        (println "Pending update retractions: " *pending-update-retractions*)
-
-        (def dbg-list (into [] *pending-update-retractions*))
 
         (doseq [[alpha-roots fact-group] (get-alphas-fn added-facts)
                 root alpha-roots]
