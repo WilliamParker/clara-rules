@@ -209,6 +209,73 @@
       (is (= @test-cold-windy-join-update-counter 0)
           "Validate that an update on the second condition that does not impact RHS bindings does not cause rule activation."))))
 
+(deftest test-cold-windy-join-with-rhs-impact
+  (let [simple-join-rule (dsl/parse-rule [[Temperature (= ?loc location) (= ?t temperature)]
+                                          [WindSpeed (= ?loc location) (= ?w windspeed)]]
+                                         (insert! (->ColdAndWindy ?t ?w)))
+
+        filter-join-rule (dsl/parse-rule [[Temperature (= ?loc location) (= ?t temperature)]
+                                          [WindSpeed (tr/join-filter-equals ?loc location) (= ?w windspeed)]]
+                                         (insert! (->ColdAndWindy ?t ?w)))
+
+        cw-query (dsl/parse-query [] [[ColdAndWindy (= ?t temperature) (= ?w windspeed)]])]
+
+    (doseq [[empty-session join-type] [[(mk-session [simple-join-rule cw-query] :cache false) " simple join"]
+                                       [(mk-session [filter-join-rule cw-query] :cache false) " filter join"]]
+            
+            :let [with-fact-session (-> empty-session
+                                        (insert (->Temperature -20 "ORD"))
+                                        (insert (->WindSpeed 20 "ORD"))
+                                        fire-rules)]]
+
+      (is (= (query with-fact-session cw-query)
+             [{:?t -20 :?w 20}])
+          (str "Sanity check of our rule without updates for a" join-type))
+
+      (is (= (-> with-fact-session
+                 (eng/update-facts [[(->Temperature -20 "ORD") (->Temperature -10 "ORD")]])
+                 fire-rules
+                 (query cw-query))
+             [{:?t -10 :?w 20}])
+          (str "Update of a Temperature fact that is present for a" join-type))
+
+      (is (= (-> with-fact-session
+                 (eng/update-facts [[(->WindSpeed 20 "ORD") (->WindSpeed 10 "ORD")]])
+                 fire-rules
+                 (query cw-query))
+             [{:?t -20 :?w 10}])
+          (str "Update of a WindSpeed fact that is present for a" join-type))
+
+      (is (= (-> with-fact-session
+                 (eng/update-facts [[(->Temperature -10 "ORD") (->Temperature -5 "ORD")]])
+                 fire-rules
+                 (query cw-query)
+                 frequencies)
+             (frequencies [{:?t -20 :?w 20} {:?t -5 :?w 20}]))
+          (str "Update of a Temperature fact that is not present for a" join-type))
+
+      (is (= (-> with-fact-session
+                 (eng/update-facts [[(->WindSpeed 10 "ORD") (->WindSpeed 5 "ORD")]])
+                 fire-rules
+                 (query cw-query)
+                 frequencies)
+             (frequencies [{:?t -20 :?w 20} {:?t -20 :?w 5}]))
+          (str "Update of a WindSpeed fact that is not present for a" join-type))
+
+      (is (= (-> with-fact-session
+                 (eng/update-facts [[(->Temperature -20 "ORD") (->Temperature -20 "LGA")]])
+                 fire-rules
+                 (query cw-query))
+             [])
+          (str "Update of a Temperature fact that should cause the join to no longer succeed for a" join-type))
+
+      (is (= (-> with-fact-session
+                 (eng/update-facts [[(->WindSpeed 20 "ORD") (->WindSpeed 20 "LGA")]])
+                 fire-rules
+                 (query cw-query))
+             [])
+          (str "Update of a WindSpeed fact that should cause the join to no longer succeed for a" join-type)))))
+
         
                              
 
