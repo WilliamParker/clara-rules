@@ -127,8 +127,6 @@
 
         empty-session (mk-session [cold-temp-rule cold-query] :cache false)]
 
-    (def s empty-session)
-
     (reset! test-unused-field-changes-simple-hash-join-counter 0)
 
     (let [initial-inserted (-> empty-session
