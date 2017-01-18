@@ -157,8 +157,8 @@
                         (query cold-query)))
             "Validate that future truth maintenance based on the updated fact works")))))
 
-(def test-cold-windy-join-update-counter (atom 0))
-(deftest test-cold-windy-join-update
+(def test-cold-windy-join-update-without-rhs-impact (atom 0))
+(deftest test-cold-windy-join-update-without-rhs-impact
   (let [simple-join-rule (dsl/parse-rule [[Temperature (= ?loc location)]
                                           [WindSpeed (= ?loc location)]]
                                          (do
