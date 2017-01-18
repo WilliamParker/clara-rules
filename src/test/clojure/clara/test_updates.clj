@@ -6,7 +6,8 @@
             [clara.rules.accumulators :as acc]
             [clara.rules.dsl :as dsl]
             [clojure.set :as s]
-            [schema.test])
+            [schema.test]
+            [clara.test-rules :as tr])
   (import [clara.rules.testfacts Temperature WindSpeed Cold Hot TemperatureHistory
            ColdAndWindy LousyWeather First Second Third Fourth FlexibleFields]))
 
@@ -155,6 +156,61 @@
                         fire-rules
                         (query cold-query)))
             "Validate that future truth maintenance based on the updated fact works")))))
+
+(def test-cold-windy-join-update-counter (atom 0))
+(deftest test-cold-windy-join-update
+  (let [simple-join-rule (dsl/parse-rule [[Temperature (= ?loc location)]
+                                          [WindSpeed (= ?loc location)]]
+                                         (do
+                                           (swap! test-cold-windy-join-update-counter inc)
+                                           (insert! (->ColdAndWindy 0 0))))
+
+        filter-join-rule (dsl/parse-rule [[Temperature (= ?loc location)]
+                                          [WindSpeed (tr/join-filter-equals ?loc location)]]
+                                         (do
+                                           (swap! test-cold-windy-join-update-counter inc)
+                                           (insert! (->ColdAndWindy 0 0))))
+
+        cw-query (dsl/parse-query [] [[ColdAndWindy (= ?t temperature)]])]
+
+    (doseq [[empty-session join-type] [[(mk-session [simple-join-rule cw-query] :cache false) " simple join"]
+                                       [(mk-session [filter-join-rule cw-query] :cache false) " filter join"]]
+            
+            :let [with-fact-session (-> empty-session
+                                        (insert (->Temperature -20 "ORD"))
+                                        (insert (->WindSpeed 20 "ORD"))
+                                        fire-rules)]]
+
+      (is (= (query with-fact-session cw-query)
+             [{:?t 0}])
+          "Sanity check of our rule without updates")
+
+      (reset! test-cold-windy-join-update-counter 0)
+
+      (is (= (-> with-fact-session
+                 (eng/update-facts [[(->Temperature -20 "ORD") (->Temperature -15 "ORD")]])
+                 fire-rules
+                 (query cw-query))
+             [{:?t 0}])
+          "Update a fact matching the first condition without impacting RHS bindings.")
+
+      (is (= @test-cold-windy-join-update-counter 0)
+          "Validate that an update on the first condition that does not impact RHS bindings does not cause rule activation.")
+
+      (reset! test-cold-windy-join-update-counter 0)
+
+      (is (= (-> with-fact-session
+                 (eng/update-facts [[(->WindSpeed 20 "ORD") (->WindSpeed 15 "ORD")]])
+                 fire-rules
+                 (query cw-query))
+             [{:?t 0}])
+          "Update a fact matching the second condition without impacting RHS bindings.")
+
+      (is (= @test-cold-windy-join-update-counter 0)
+          "Validate that an update on the second condition that does not impact RHS bindings does not cause rule activation."))))
+
+        
+                             
 
     
            
