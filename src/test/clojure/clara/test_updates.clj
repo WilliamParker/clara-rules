@@ -183,7 +183,7 @@
 
       (is (= (query with-fact-session cw-query)
              [{:?t 0}])
-          "Sanity check of our rule without updates")
+          (str "Sanity check of our rule without updates for a" join-type))
 
       (reset! test-cold-windy-join-update-counter 0)
 
@@ -192,10 +192,10 @@
                  fire-rules
                  (query cw-query))
              [{:?t 0}])
-          "Update a fact matching the first condition without impacting RHS bindings.")
+          (str "Update a fact matching the first condition without impacting RHS bindings for a" join-type))
 
       (is (= @test-cold-windy-join-update-counter 0)
-          "Validate that an update on the first condition that does not impact RHS bindings does not cause rule activation.")
+          (str "Validate that an update on the first condition that does not impact RHS bindings does not cause rule activation for a" join-type))
 
       (reset! test-cold-windy-join-update-counter 0)
 
@@ -204,10 +204,10 @@
                  fire-rules
                  (query cw-query))
              [{:?t 0}])
-          "Update a fact matching the second condition without impacting RHS bindings.")
+          (str "Update a fact matching the second condition without impacting RHS bindings for a " join-type))
 
       (is (= @test-cold-windy-join-update-counter 0)
-          "Validate that an update on the second condition that does not impact RHS bindings does not cause rule activation."))))
+          (str "Validate that an update on the second condition that does not impact RHS bindings does not cause rule activation for a" join-type)))))
 
 (deftest test-cold-windy-join-with-rhs-impact
   (let [simple-join-rule (dsl/parse-rule [[Temperature (= ?loc location) (= ?t temperature)]

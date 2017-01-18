@@ -306,6 +306,9 @@
                                                       (let [matching-tuple (some (fn [insertion-tuple]
                                                                                    (when (and (= id
                                                                                                  (-> insertion-tuple first :id))
+                                                                                              ;; Validate that the update-id actually exists
+                                                                                              ;; FIXME: Make it have to be greater than the existing floor
+                                                                                              (-> token meta ::update-id)
                                                                                               (= (-> token meta ::update-id)
                                                                                                  (-> insertion-tuple second meta ::update-id))
                                                                                               (= (-> token :bindings (select-keys rhs-bindings))
@@ -617,8 +620,10 @@
                  fact-binding (:bindings element)
                  beta-bindings (join-filter-fn token fact {})]
            :when beta-bindings]
-       (->Token (conj (:matches token) [fact id])
-                (conj fact-binding (:bindings token) beta-bindings)))))
+       (vary-meta
+        (->Token (conj (:matches token) [fact id])
+                 (conj fact-binding (:bindings token) beta-bindings))
+        assoc ::update-id (-> token meta ::update-id)))))
 
   (left-retract [node join-bindings tokens memory transport listener]
     (l/left-retract! listener node tokens)
@@ -633,8 +638,10 @@
                  fact-bindings (:bindings element)
                  beta-bindings (join-filter-fn token fact {})]
            :when beta-bindings]
-       (->Token (conj (:matches token) [fact id])
-                (conj fact-bindings (:bindings token) beta-bindings)))))
+       (vary-meta
+        (->Token (conj (:matches token) [fact id])
+                 (conj fact-bindings (:bindings token) beta-bindings))
+        assoc ::update-id (-> token meta ::update-id)))))
 
   (get-join-keys [node] binding-keys)
 
@@ -653,8 +660,10 @@
            {:keys [fact bindings] :as element} elements
            :let [beta-bindings (join-filter-fn token fact {})]
            :when beta-bindings]
-       (->Token (conj (:matches token) [fact id])
-                (conj (:bindings token) bindings beta-bindings)))))
+       (vary-meta
+        (->Token (conj (:matches token) [fact id])
+                 (conj (:bindings token) bindings beta-bindings))
+        assoc ::update-id (-> element meta ::update-id)))))
 
   (right-retract [node join-bindings elements memory transport listener]
     (l/right-retract! listener node elements)
@@ -667,8 +676,10 @@
            token (mem/get-tokens memory node join-bindings)
            :let [beta-bindings (join-filter-fn token fact {})]
            :when beta-bindings]
-       (->Token (conj (:matches token) [fact id])
-                (conj (:bindings token) bindings beta-bindings))))))
+       (vary-meta
+        (->Token (conj (:matches token) [fact id])
+                 (conj (:bindings token) bindings beta-bindings))
+        assoc ::update-id (-> element meta ::update-id))))))
 
 ;; The NegationNode is a beta node in the Rete network that simply
 ;; negates the incoming tokens from its ancestors. It sends tokens
