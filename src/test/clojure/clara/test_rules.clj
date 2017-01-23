@@ -14,7 +14,9 @@
             [clojure.walk :as walk]
             [clara.sample-ruleset-seq :as srs]
             [clara.order-ruleset :as order-rules]
-            [schema.test])
+            [schema.test]
+            [clara.rules.update-cache.core :as uc]
+            [clara.rules.update-cache.cancelling :as ca])
   (import [clara.rules.testfacts Temperature WindSpeed Cold Hot TemperatureHistory
            ColdAndWindy LousyWeather First Second Third Fourth FlexibleFields]
           [clara.rules.engine
@@ -27,7 +29,12 @@
            LinkedList
            ArrayList]))
 
-(use-fixtures :once schema.test/validate-schemas)
+(defn opts-fixture [f]
+  (f)
+  (with-redefs [uc/get-ordered-update-cache ca/get-cancelling-update-cache]
+    (f)))
+
+(use-fixtures :once schema.test/validate-schemas opts-fixture)
 
 (defn- has-fact? [token fact]
   (some #{fact} (map first (:matches token))))
@@ -5059,3 +5066,85 @@
     
     (is (not-any? #(= 1 (count %)) @accum-state)
         "Facts with common ancestors should be batched together, expected either the initial accumulator value or a vector containing both lists but never a vector containing one list.")))
+
+(def ^:dynamic *side-effect-holder* nil)
+
+(deftest test-cancelling-facts
+  (binding [*side-effect-holder* (atom false)]
+    (let [cold-rule (dsl/parse-rule [[ColdAndWindy (= ?t temperature) (< ?t 100)]]
+                                    (insert! (->Cold ?t)))
+
+          lousy-weather-rule (dsl/parse-rule [[Cold]]
+                                             (do
+                                               (reset! *side-effect-holder* true)
+                                               (insert! (->LousyWeather))))
+
+          cold-windy-query (dsl/parse-query [] [[ColdAndWindy (= ?t temperature) (= ?w windspeed)]])
+
+          cold-query (dsl/parse-query [] [[Cold (= ?t temperature)]])
+
+          lousy-weather-query (dsl/parse-query [] [[LousyWeather]])
+
+          empty-session (mk-session [cold-rule cold-query lousy-weather-rule
+                                     lousy-weather-query cold-windy-query] :cache false)
+
+          with-cold-session (-> empty-session
+                                (insert (->ColdAndWindy -10 20))
+                                fire-rules)
+
+          first-cold-rhs-fired? @*side-effect-holder*
+
+          _ (reset! *side-effect-holder* false)
+
+          updated-cold-session (eng/replace-facts with-cold-session [(->ColdAndWindy -10 30)] [(->ColdAndWindy -10 20)])
+
+          after-update-cold-rhs-fired? @*side-effect-holder*
+
+          cold-removed-session (eng/replace-facts with-cold-session [(->ColdAndWindy 200 20)] [(->ColdAndWindy -10 20)])]
+
+      (is (= (query with-cold-session cold-query)
+             [{:?t -10}])
+          "Sanity check that the Cold fact was inserted")
+
+      (is (= (query with-cold-session lousy-weather-query)
+             [{}])
+          "Sanity check that the LousyWeather fact was inserted")
+
+      (is (= (query with-cold-session cold-windy-query)
+             [{:?t -10 :?w 20}])
+          "Sanity check that the ColdAndWindy fact was inserted")
+
+      (is (true? first-cold-rhs-fired?)
+          "Sanity check of the RHS atom")
+
+      ;;; Tests with the ColdAndWindy fact updated that will not impact the Cold fact.
+
+      (is (= (query updated-cold-session cold-query)
+             [{:?t -10}])
+          (str "Test that we still have the same Cold fact value after an update that should not impact "
+               "it but is a direct consequence of the updated fact."))
+
+      (is (= (query updated-cold-session cold-windy-query)
+             [{:?t -10 :?w 30}])
+          "Validate that the ColdAndWindy fact was updated")
+
+      (is (= (query with-cold-session lousy-weather-query)
+             [{}])
+          "Sanity check that the LousyWeather fact is still present after the update.")
+
+      (is (false? after-update-cold-rhs-fired?)
+          "Check that the RHS of the rule matching on RHS was not fired.")
+
+      ;;; Tests with the ColdAndWindy fact updated in a way that should cause the removal
+      ;;; of the ColdAndWindy fact.
+
+      (is (= (query cold-removed-session cold-windy-query)
+             [{:?t 200 :?w 20}])
+          "Check that the invalid ColdAndWindy fact was inserted.")
+
+      (is (empty? (query cold-removed-session cold-query))
+          "Validate that the Cold was removed.")
+
+      (is (empty? (query cold-removed-session lousy-weather-query))
+          "Validate that the LousyWeather was removed"))))
+  
