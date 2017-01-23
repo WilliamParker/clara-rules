@@ -1638,6 +1638,9 @@
     (let [transient-memory (mem/to-transient memory)
           transient-listener (l/to-transient listener)
           update-cache #?(:clj (ca/get-cancelling-update-cache)
+                          ;; TODO: Add a ClojureScript equivalent of the cancelling update cache.
+                          ;; For now just fall back to the same implementation
+                          ;; used for the other session operations.
                           :cljs (uc/get-ordered-update-cache))]
 
       ;; Bind the current session so that retractions will be stored

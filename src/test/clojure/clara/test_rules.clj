@@ -16,7 +16,8 @@
             [clara.order-ruleset :as order-rules]
             [schema.test]
             [clara.rules.update-cache.core :as uc]
-            [clara.rules.update-cache.cancelling :as ca])
+            [clara.rules.update-cache.cancelling :as ca]
+            [clara.experimental :as exp])
   (import [clara.rules.testfacts Temperature WindSpeed Cold Hot TemperatureHistory
            ColdAndWindy LousyWeather First Second Third Fourth FlexibleFields]
           [clara.rules.engine
@@ -29,12 +30,21 @@
            LinkedList
            ArrayList]))
 
-(defn opts-fixture [f]
+(defn opts-fixture
+  ;; For operations other than replace-facts uc/get-ordered-update-cache is currently
+  ;; always used.  This fixture ensures that CancellingUpdateCache is tested for a wide
+  ;; variety of different cases rather than a few cases cases specific to it.
+  [f]
   (f)
   (with-redefs [uc/get-ordered-update-cache ca/get-cancelling-update-cache]
     (f)))
 
 (use-fixtures :once schema.test/validate-schemas opts-fixture)
+
+;; Shared dynamic var to hold stateful constructs used by rules.  Rules cannot
+;; use the environmental in their test body in their RHS, so we need a var that
+;; is resolvable in this test namespace.
+(def ^:dynamic *side-effect-holder* nil)
 
 (defn- has-fact? [token fact]
   (some #{fact} (map first (:matches token))))
@@ -5067,8 +5077,6 @@
     (is (not-any? #(= 1 (count %)) @accum-state)
         "Facts with common ancestors should be batched together, expected either the initial accumulator value or a vector containing both lists but never a vector containing one list.")))
 
-(def ^:dynamic *side-effect-holder* nil)
-
 (deftest test-cancelling-facts
   (binding [*side-effect-holder* (atom false)]
     (let [cold-rule (dsl/parse-rule [[ColdAndWindy (= ?t temperature) (< ?t 100)]]
@@ -5096,11 +5104,11 @@
 
           _ (reset! *side-effect-holder* false)
 
-          updated-cold-session (eng/replace-facts with-cold-session [(->ColdAndWindy -10 30)] [(->ColdAndWindy -10 20)])
+          updated-cold-session (exp/replace-facts with-cold-session [(->ColdAndWindy -10 30)] [(->ColdAndWindy -10 20)])
 
           after-update-cold-rhs-fired? @*side-effect-holder*
 
-          cold-removed-session (eng/replace-facts with-cold-session [(->ColdAndWindy 200 20)] [(->ColdAndWindy -10 20)])]
+          cold-removed-session (exp/replace-facts with-cold-session [(->ColdAndWindy 200 20)] [(->ColdAndWindy -10 20)])]
 
       (is (= (query with-cold-session cold-query)
              [{:?t -10}])
