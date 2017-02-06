@@ -19,7 +19,7 @@
 
     (cond
 
-      (identical? this other)
+      (identical? fact (.fact ^FactWrapper other))
       true
 
       (not (== fact-hash (.fact_hash ^FactWrapper other)))
@@ -42,7 +42,7 @@
         ^List current-val (.get m wrapper)]
     (if current-val
       (.add current-val fact)
-      (.put m wrapper (java.util.LinkedList. [fact])))))
+      (.put m wrapper (LinkedList. [fact])))))
 
 (defn dec-fact-count! [^Map m fact]
   (let [wrapper (FactWrapper. fact (hash fact))
@@ -68,9 +68,13 @@
       (when (.hasNext it)
         (do (let [^java.util.Map$Entry e (.next it)
                   fact (.fact ^FactWrapper (.getKey e))
-                  facts-in-val (.getValue e)]
-              (doseq [f facts-in-val]
-                (.add val-list f)))
+                  ^Iterable facts-in-val (.getValue e)
+                  fact-iter (.iterator facts-in-val)]
+              (loop []
+                (when (.hasNext fact-iter)
+                  (do
+                    (.add val-list (.next fact-iter))
+                    (recur)))))
             (recur))))
     ;; This list will never be exposed to the user; it is simply iterated over
     ;; by the engine and then discarded.  This being the case there is no
