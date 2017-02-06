@@ -19,6 +19,11 @@
 
     (cond
 
+      ;; There are some cases where the inserted and retracted facts could be identical, particularly
+      ;; if user code in the RHS has caches, so we go ahead and check for identity as a first-pass check,
+      ;; but there are probably aren't enough cases where the facts are identical to make doing a full sweep
+      ;; on identity first worthwhile, particularly since in practice the hash check will make the vast majority
+      ;; of .equals calls that return false quite fast.
       (identical? fact (.fact ^FactWrapper other))
       true
 
@@ -55,7 +60,9 @@
           (.remove m wrapper)
           ;;; Since as noted above, the facts are equal, we don't actually care which one we remove.
           ;;; We remove the first here to avoid any work checking equality and since this is a constant-time
-          ;;; operation on LinkedList.
+          ;;; operation on LinkedList.  Since the insertions will be newly inserted facts we probably won't
+          ;;; have many identical retractions, so doing a sweep for identical facts first probably wouldn't
+          ;;; have enough hits to be worth the cost.
           (.removeFirst current-val))
         true)
       false)))
@@ -104,9 +111,13 @@
             (recur))))))
 
   (add-retractions! [this facts]
-    (doseq [fact facts]
-      (when-not (dec-fact-count! insertions fact)
-        (inc-fact-count! retractions fact))))
+    (let [fact-iter (.iterator ^Iterable facts)]
+      (loop []
+        (when (.hasNext fact-iter)
+          (let [fact (.next fact-iter)]
+            (when-not (dec-fact-count! insertions fact)
+              (inc-fact-count! retractions fact))
+            (recur))))))
 
   (get-updates-and-reset! [this]
     (let [retractions-update (when (-> retractions .size pos?)
@@ -119,6 +130,9 @@
       (cond
 
         (and insertions-update retractions-update)
+        ;; This could be ordered to have insertions before retractions if we ever
+        ;; found that that performs better on average.  Either ordering should
+        ;; be functionally correct.
         [[retractions-update] [insertions-update]]
 
         insertions-update
