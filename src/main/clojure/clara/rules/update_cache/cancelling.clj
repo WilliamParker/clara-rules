@@ -95,9 +95,13 @@
   uc/UpdateCache
 
   (add-insertions! [this facts]
-    (doseq [fact facts]
-      (when-not (dec-fact-count! retractions fact)
-        (inc-fact-count! insertions fact))))
+    (let [fact-iter (.iterator ^Iterable facts)]
+      (loop []
+        (when (.hasNext fact-iter)
+          (let [fact (.next fact-iter)]
+            (when-not (dec-fact-count! retractions fact)
+              (inc-fact-count! insertions fact))
+            (recur))))))
 
   (add-retractions! [this facts]
     (doseq [fact facts]
