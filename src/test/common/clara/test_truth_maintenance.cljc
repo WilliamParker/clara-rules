@@ -105,6 +105,31 @@
             {:?c (->Cold 50)}]
 
            (query session-retracted find-cold)))))
+
+(def-rules-test test-insert-and-retract
+  {:rules [cold-rule [[[Temperature (< temperature 20) (= ?t temperature)]]
+                      (insert! (->Cold ?t))]]
+
+   :queries [cold-query [[] [[Cold (= ?c temperature)]]]]
+
+   :sessions [empty-session [cold-rule cold-query] {}]}
+
+  (let [session (-> empty-session
+                    (insert (->Temperature 10 "MCI"))
+                    (fire-rules))
+
+        retracted (-> session
+                      (retract (->Temperature 10 "MCI"))
+                      (fire-rules))]
+
+    (is (= {{:?c 10} 1}
+           (frequencies (query session cold-query))))
+
+    ;; Ensure retracting the temperature also removes the logically inserted fact.
+    (is (empty?
+         (query
+          retracted
+          cold-query)))))
   
    
 
