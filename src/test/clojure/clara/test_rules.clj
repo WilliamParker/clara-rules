@@ -1649,45 +1649,6 @@
     (is (= #{{:?c 10}}
            (set (query session cold-lousy-query))))))
 
-(deftest test-insert-and-retract-custom-type
-  (let [;; Insert a new fact and ensure it exists.
-        cold-rule (dsl/parse-rule [[:temperature [{value :value}] (< value 20) (= ?t value)]]
-                                  (insert! {:type :cold :value ?t}))
-
-        cold-query (dsl/parse-query [] [[:cold [{value :value}] (= ?c value)]])
-
-        session (-> (mk-session [cold-rule cold-query] :fact-type-fn :type :cache false)
-                    (insert {:type :temperature :value 10})
-                    (fire-rules))
-
-        retracted (-> session
-                      (retract {:type :temperature :value 10})
-                      (fire-rules))]
-
-    (is (= #{{:?c 10}}
-           (set (query session cold-query))))
-
-    ;; Ensure retracting the temperature also removes the logically inserted fact.
-    (is (empty?
-         (query
-          retracted
-          cold-query)))))
-
-(deftest test-insert-retract-join ;; Test for issue #67
-  (let [cold-not-windy-query (dsl/parse-query [] [[Temperature (< temperature 20) (= ?t temperature)]
-                                                  [:not [WindSpeed]]])
-
-        session (-> (mk-session [cold-not-windy-query])
-                    (insert (->WindSpeed 30 "MCI"))
-                    (retract (->WindSpeed 30 "MCI"))
-                    (fire-rules))]
-
-    (is (= [{:?t 10}]
-           (-> session
-               (insert (->Temperature 10 "MCI"))
-               (fire-rules)
-               (query cold-not-windy-query))))))
-
 (deftest test-unconditional-insert
   (let [rule-output (atom nil)
         ;; Insert a new fact and ensure it exists.

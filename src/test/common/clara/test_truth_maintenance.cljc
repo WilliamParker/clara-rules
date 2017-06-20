@@ -157,11 +157,21 @@
           retracted
           cold-query)))))
 
-  
+;; Test for issue 67
+(def-rules-test test-insert-retract-negation-join
 
-  
-   
+  {:queries [cold-not-windy-query [[] [[Temperature (< temperature 20) (= ?t temperature)]
+                                       [:not [WindSpeed]]]]]
 
-  
+   :sessions [empty-session [cold-not-windy-query] {}]}
 
-            
+  (let [session (-> empty-session
+                    (insert (->WindSpeed 30 "MCI"))
+                    (retract (->WindSpeed 30 "MCI"))
+                    (fire-rules))]
+
+    (is (= [{:?t 10}]
+           (-> session
+               (insert (->Temperature 10 "MCI"))
+               (fire-rules)
+               (query cold-not-windy-query))))))
