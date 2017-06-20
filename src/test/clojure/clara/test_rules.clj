@@ -1946,7 +1946,7 @@
                     (insert (->First))
                     (fire-rules))]
 
-    ;; The query should identify all items that wer einserted and matchd the
+    ;; The query should identify all items that were inserted and matched the
     ;; expected criteria.
     (is (= #{{:?item (->Fourth)}}
            (set (query session item-query))))))
