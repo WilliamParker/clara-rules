@@ -11,7 +11,8 @@
                                     query]]
 
                [clara.rules.testfacts :refer [->Temperature ->Cold ->WindSpeed
-                                              ->TemperatureHistory ->LousyWeather]]
+                                              ->TemperatureHistory ->LousyWeather
+                                              ->ColdAndWindy]]
                [clojure.test :refer [is deftest run-tests testing use-fixtures]]
                [clara.rules.accumulators :as acc]
                [schema.test :as st])
@@ -19,6 +20,7 @@
                Temperature
                TemperatureHistory
                Cold
+               ColdAndWindy
                WindSpeed
                LousyWeather]))
 
@@ -36,6 +38,7 @@
                [clara.rules.testfacts :refer [->Temperature Temperature
                                               ->TemperatureHistory TemperatureHistory
                                               ->Cold Cold
+                                              ->ColdAndWindy ColdAndWindy
                                               ->WindSpeed WindSpeed
                                               ->LousyWeather LousyWeather]]
                [schema.test :as st])
@@ -240,6 +243,31 @@
 
     (is (= {{:?l (->LousyWeather)} 1}
            (frequencies (query retracted-session lousy-query))))))
+
+(def-rules-test test-insert-retract-multi-input
+  {:rules [cold-windy-rule [[[Temperature (< temperature 20) (= ?t temperature)]
+                             [WindSpeed (> windspeed 30) (= ?w windspeed)]]
+                            (insert! (->ColdAndWindy ?t ?w))]]
+
+   :queries [cold-windy-query [[] [[ColdAndWindy (= ?ct temperature) (= ?cw windspeed)]]]]
+
+   :sessions [empty-session [cold-windy-rule cold-windy-query] {}]}
+
+  (let [session (-> empty-session
+                    (insert (->Temperature 10 "MCI"))
+                    (insert (->WindSpeed 40 "MCI"))
+                    (fire-rules))
+
+        retracted (-> session
+                      (retract session (->Temperature 10 "MCI"))
+                      fire-rules)]
+
+    (is (= {{:?ct 10 :?cw 40} 1}
+           (frequencies (query session cold-windy-query))))
+
+    ;; Ensure retracting the temperature also removes the logically inserted fact.
+    (is (empty?
+         (query retracted cold-windy-query)))))
 
   
 

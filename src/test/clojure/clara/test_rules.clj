@@ -1649,29 +1649,6 @@
     (is (= #{{:?c 10}}
            (set (query session cold-lousy-query))))))
 
-(deftest test-insert-and-retract-multi-input
-  (let [rule-output (atom nil)
-        ;; Insert a new fact and ensure it exists.
-        cold-rule (dsl/parse-rule [[Temperature (< temperature 20) (= ?t temperature)]
-                                   [WindSpeed (> windspeed 30) (= ?w windspeed)]]
-                           (insert! (->ColdAndWindy ?t ?w)) )
-
-        cold-query (dsl/parse-query [] [[ColdAndWindy (= ?ct temperature) (= ?cw windspeed)]])
-
-        session (-> (mk-session [cold-rule cold-query])
-                    (insert (->Temperature 10 "MCI"))
-                    (insert (->WindSpeed 40 "MCI"))
-                    (fire-rules))]
-
-    (is (= #{{:?ct 10 :?cw 40}}
-           (set (query session cold-query))))
-
-    ;; Ensure retracting the temperature also removes the logically inserted fact.
-    (is (empty?
-         (query
-          (fire-rules (retract session (->Temperature 10 "MCI")))
-          cold-query)))))
-
 (deftest test-expression-to-dnf
 
   ;; Test simple condition.
