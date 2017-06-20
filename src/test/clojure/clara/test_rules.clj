@@ -1492,46 +1492,6 @@
     (is (= #{}
            (set (query retracted-session same-wind-and-temp))))))
 
-(deftest test-retraction-of-equal-elements
-  (let [insert-cold (dsl/parse-rule [[Temperature (= ?temp temperature)]]
-
-                                    ;; Insert 2 colds that have equal
-                                    ;; values to ensure they are both
-                                    ;;retracted
-                                    (insert! (->Cold ?temp)
-                                             (->Cold ?temp)))
-
-        find-cold (dsl/parse-query [] [[?c <- Cold]])
-
-        ;; Each temp should insert 2 colds.
-        session-inserted (-> (mk-session [insert-cold find-cold])
-                             (insert (->Temperature 50 "LAX"))
-                             (insert (->Temperature 50 "MCI"))
-                             fire-rules)
-
-        ;; Retracting one temp should retract both of its
-        ;; logically inserted colds, but leave the others, even though
-        ;; they are equal.
-        session-retracted (-> session-inserted
-                              (retract (->Temperature 50 "MCI"))
-                              fire-rules)]
-
-    (is (= 4 (count (query session-inserted find-cold))))
-
-    (is (= [{:?c (->Cold 50)}
-            {:?c (->Cold 50)}
-            {:?c (->Cold 50)}
-            {:?c (->Cold 50)}]
-
-           (query session-inserted find-cold)))
-
-    (is (= 2 (count (query session-retracted find-cold))))
-
-    (is (= [{:?c (->Cold 50)}
-            {:?c (->Cold 50)}]
-
-           (query session-retracted find-cold)))))
-
 (deftest test-negation-of-changing-result-from-accumulator-in-fire-rules
   (let [min-temp-rule (dsl/parse-rule [[?c <- (acc/min :temperature :returns-fact true) :from [ColdAndWindy]]]
                                       (insert! (->Cold (:temperature ?c)))
