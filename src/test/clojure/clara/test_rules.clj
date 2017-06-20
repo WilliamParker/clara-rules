@@ -154,18 +154,6 @@
 
     (is (has-fact? @subzero-rule-output (->Temperature -10 "MCI")))))
 
-(deftest test-cancelled-activation
-  (let [rule-output (atom nil)
-        cold-rule (dsl/parse-rule [[Temperature (< temperature 20)]]
-                                  (reset! rule-output ?__token__) )
-
-        session (-> (mk-session [cold-rule])
-                    (insert (->Temperature 10 "MCI"))
-                    (retract (->Temperature 10 "MCI"))
-                    (fire-rules))]
-
-    (is (= nil @rule-output))))
-
 (deftest test-simple-binding
   (let [rule-output (atom nil)
         cold-rule (dsl/parse-rule [[Temperature (< temperature 20) (= ?t temperature)]]
