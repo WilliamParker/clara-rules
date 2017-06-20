@@ -130,6 +130,35 @@
          (query
           retracted
           cold-query)))))
+
+(def-rules-test test-insert-retract-custom-type
+
+  {:rules [cold-rule [[[:temperature [{value :value}] (< value 20) (= ?t value)]]
+                      (insert! {:type :cold :value ?t})]]
+
+   :queries [cold-query [[] [[:cold [{value :value}] (= ?c value)]]]]
+
+   :sessions [empty-session [cold-rule cold-query] {:fact-type-fn :type}]}
+
+  (let [session (-> empty-session
+                    (insert {:type :temperature :value 10})
+                    (fire-rules))
+
+        retracted (-> session
+                      (retract {:type :temperature :value 10})
+                      (fire-rules))]
+
+    (is (= {{:?c 10} 1}
+           (frequencies (query session cold-query))))
+
+    ;; Ensure retracting the temperature also removes the logically inserted fact.
+    (is (empty?
+         (query
+          retracted
+          cold-query)))))
+
+  
+
   
    
 
