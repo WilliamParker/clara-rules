@@ -6,11 +6,12 @@
                                     insert-all
                                     insert!
                                     insert-unconditional!
+                                    insert-all-unconditional!
                                     retract
                                     query]]
 
                [clara.rules.testfacts :refer [->Temperature ->Cold ->WindSpeed
-                                              ->TemperatureHistory]]
+                                              ->TemperatureHistory ->LousyWeather]]
                [clojure.test :refer [is deftest run-tests testing use-fixtures]]
                [clara.rules.accumulators :as acc]
                [schema.test :as st])
@@ -18,7 +19,8 @@
                Temperature
                TemperatureHistory
                Cold
-               WindSpeed]))
+               WindSpeed
+               LousyWeather]))
 
    :cljs
    (ns clara.test-truth-maintenance
@@ -26,6 +28,7 @@
                                     insert
                                     insert!
                                     insert-unconditional!
+                                    insert-all-unconditional!
                                     insert-all
                                     retract
                                     query]]
@@ -33,7 +36,8 @@
                [clara.rules.testfacts :refer [->Temperature Temperature
                                               ->TemperatureHistory TemperatureHistory
                                               ->Cold Cold
-                                              ->WindSpeed WindSpeed]]
+                                              ->WindSpeed WindSpeed
+                                              ->LousyWeather LousyWeather]]
                [schema.test :as st])
      (:require-macros [clara.tools.testing-utils :refer [def-rules-test]]
                       [cljs.test :refer [is deftest run-tests testing use-fixtures]])))
@@ -202,6 +206,42 @@
     ;; since we used an unconditional insert.
     (is (= {{:?c 10} 1}
            (frequencies (query retracted-session cold-query))))))
+
+(def-rules-test test-unconditional-insert-all
+
+  {:rules [cold-lousy-rule [[[Temperature (< temperature 20) (= ?t temperature)]]
+                            (insert-all-unconditional! [(->Cold ?t) (->LousyWeather)])]]
+
+   :queries [cold-query [[] [[Cold (= ?c temperature)]]]
+             lousy-query [[] [[?l <- LousyWeather]]]]
+
+   :sessions [empty-session [cold-lousy-rule
+                             cold-query
+                             lousy-query] {}]}
+
+  (let [session (-> empty-session
+                    (insert (->Temperature 10 "MCI"))
+                    fire-rules)
+
+        retracted-session (-> session
+                              (retract (->Temperature 10 "MCI"))
+                              fire-rules)]
+
+    (is (= {{:?c 10} 1}
+           (frequencies (query session cold-query))))
+
+    (is (= {{:?l (->LousyWeather)} 1}
+           (frequencies (query session lousy-query))))
+
+    ;; The derived fact should continue to exist after a retraction
+    ;; since we used an unconditional insert.
+    (is (= {{:?c 10} 1}
+           (frequencies (query retracted-session cold-query))))
+
+    (is (= {{:?l (->LousyWeather)} 1}
+           (frequencies (query retracted-session lousy-query))))))
+
+  
 
     
 
