@@ -1649,30 +1649,6 @@
     (is (= #{{:?c 10}}
            (set (query session cold-lousy-query))))))
 
-(deftest test-unconditional-insert
-  (let [rule-output (atom nil)
-        ;; Insert a new fact and ensure it exists.
-        cold-rule (dsl/parse-rule [[Temperature (< temperature 20) (= ?t temperature)]]
-                                  (insert-unconditional! (->Cold ?t)) )
-
-        cold-query (dsl/parse-query [] [[Cold (= ?c temperature)]])
-
-        session (-> (mk-session [cold-rule cold-query])
-                    (insert (->Temperature 10 "MCI"))
-                    (fire-rules))
-
-        retracted-session (-> session
-                              (retract (->Temperature 10 "MCI"))
-                              fire-rules)]
-
-    (is (= #{{:?c 10}}
-           (set (query session cold-query))))
-
-    ;; The derived fact should continue to exist after a retraction
-    ;; since we used an unconditional insert.
-    (is (= #{{:?c 10}}
-           (set (query retracted-session cold-query))))))
-
 (deftest test-unconditional-insert-all
   (let [rule-output (atom nil)
         ;; Insert a new fact and ensure it exists.

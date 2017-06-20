@@ -5,6 +5,7 @@
                                     insert
                                     insert-all
                                     insert!
+                                    insert-unconditional!
                                     retract
                                     query]]
 
@@ -24,6 +25,7 @@
      (:require [clara.rules :refer [fire-rules
                                     insert
                                     insert!
+                                    insert-unconditional!
                                     insert-all
                                     retract
                                     query]]
@@ -175,3 +177,32 @@
                (insert (->Temperature 10 "MCI"))
                (fire-rules)
                (query cold-not-windy-query))))))
+
+(def-rules-test test-unconditional-insert
+
+  {:rules [cold-rule [[[Temperature (< temperature 20) (= ?t temperature)]]
+                      (insert-unconditional! (->Cold ?t))]]
+
+   :queries [cold-query [[] [[Cold (= ?c temperature)]]]]
+
+   :sessions [empty-session [cold-rule cold-query] {}]}
+
+  (let [session (-> empty-session
+                    (insert (->Temperature 10 "MCI"))
+                    (fire-rules))
+
+        retracted-session (-> session
+                              (retract (->Temperature 10 "MCI"))
+                              fire-rules)]
+
+    (is (= {{:?c 10} 1}
+           (frequencies (query session cold-query))))
+
+    ;; The derived fact should continue to exist after a retraction
+    ;; since we used an unconditional insert.
+    (is (= {{:?c 10} 1}
+           (frequencies (query retracted-session cold-query))))))
+
+    
+
+   
