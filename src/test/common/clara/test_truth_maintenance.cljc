@@ -313,6 +313,48 @@
          (-> session7 fire-rules (query temp-query))
          (-> session8 fire-rules (query temp-query)))))
 
+(def-rules-test test-retracting-many-logical-insertions-for-same-rule
+
+  {:rules [;; Do a lot of individual logical insertions for a single rule firing to
+           ;; expose any StackOverflowError potential of stacking lazy evaluations in working memory.
+           cold-temp  [[[Temperature (< temperature 30) (= ?t temperature)]]
+                       ;; Many insertions based on the Temperature fact.
+                       (dotimes [i 6000]
+                         (insert! (->Cold (- ?t i))))]]
+
+   :queries [;; Note: Adding a binding to this query, such as [Cold (= ?t temperature)]
+             ;; will cause poor performance (really slow) for 6K retractions.
+             ;; This is due to an issue with how retractions on elements is done at a per-grouped
+             ;; on :bindings level.  If every Cold fact has a different temperature, none of them
+             ;; share a :bindings when retractions happen.  This causes a lot of seperate, expensive
+             ;; retractions in the network.
+             ;; We need to find a way to do this in batch when/if possible.
+             cold-query  [[] [[Cold]]]]
+
+   :sessions [empty-session [cold-temp cold-query] {}]}
+
+  (let [session (-> empty-session
+                    (insert (->Temperature 10 "MCI"))
+                    fire-rules)]
+
+    ;; Show the initial state for a sanity check.
+    (is (= 6000
+           (count (query session cold-query))))
+
+    ;; Retract the Temperature fact that supports all of the
+    ;; logical insertions.  This would trigger a StackOverflowError
+    ;; if the insertions were stacked lazily "from the head".
+    (is (= 0
+           (count (query (-> session
+                             (retract (->Temperature 10 "MCI"))
+                             fire-rules)
+                         cold-query))))))
+
+  
+           
+
+           
+
   
 
     
