@@ -269,6 +269,50 @@
     (is (empty?
          (query retracted cold-windy-query)))))
 
+(def-rules-test test-retract-inserted-during-rule
+  {:rules [history [[[?temps <- (acc/distinct) :from [Temperature]]]
+                    (insert! (->TemperatureHistory ?temps))]
+
+           history-low-salience [[[?temps <- (acc/distinct) :from [Temperature]]]
+                                 (insert! (->TemperatureHistory ?temps))
+                                 {:salience -10}]
+
+           ;; Rule only for creating data when fired to expose this bug.
+           ;; See https://github.com/cerner/clara-rules/issues/54
+           create-data [[]
+                        (insert! (->Temperature 20 "MCI")
+                                 (->Temperature 25 "MCI")
+                                 (->Temperature 30 "SFO"))]]
+
+   :queries [temp-query [[] [[?t <- TemperatureHistory]]]]
+
+   ;; The bug this is testing dependend on rule order, so we test
+   ;; multiple orders.
+   :sessions [session1 [create-data temp-query history] {}
+              session2 [history create-data temp-query] {}
+              session3 [history temp-query create-data] {}
+              session4 [temp-query create-data history] {}
+
+              session5 [create-data temp-query history-low-salience] {}
+              session6 [history-low-salience create-data temp-query] {}
+              session7 [history-low-salience temp-query create-data] {}
+              session8 [temp-query create-data history-low-salience] {}]}
+
+  ;; We should match an empty list to start.
+  (is (= [{:?t (->TemperatureHistory #{(->Temperature 20 "MCI")
+                                       (->Temperature 25 "MCI")
+                                       (->Temperature 30 "SFO")})}]
+         
+         (-> session1 fire-rules (query temp-query))
+         (-> session2 fire-rules (query temp-query))
+         (-> session3 fire-rules (query temp-query))
+         (-> session4 fire-rules (query temp-query))
+         
+         (-> session5 fire-rules (query temp-query))
+         (-> session6 fire-rules (query temp-query))
+         (-> session7 fire-rules (query temp-query))
+         (-> session8 fire-rules (query temp-query)))))
+
   
 
     
