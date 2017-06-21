@@ -4573,7 +4573,7 @@
                     (fire-rules))]
 
     (is (has-fact? @rule-output (->Temperature 10 "MCI")))))
-
+;; START_HERE
 (deftest test-remove-pending-activation-with-equal-previous-insertion
   ;; See issue 250 for details of the bug fix this tests.
   (let [lousy-weather-rule (dsl/parse-rule [[?cw <- ColdAndWindy]]
