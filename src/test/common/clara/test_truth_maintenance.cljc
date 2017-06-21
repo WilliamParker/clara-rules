@@ -12,7 +12,7 @@
 
                [clara.rules.testfacts :refer [->Temperature ->Cold ->WindSpeed
                                               ->TemperatureHistory ->LousyWeather
-                                              ->ColdAndWindy]]
+                                              ->ColdAndWindy ->First ->Second ->Third]]
                [clojure.test :refer [is deftest run-tests testing use-fixtures]]
                [clara.rules.accumulators :as acc]
                [schema.test :as st])
@@ -22,7 +22,10 @@
                Cold
                ColdAndWindy
                WindSpeed
-               LousyWeather]))
+               LousyWeather
+               First
+               Second
+               Third]))
 
    :cljs
    (ns clara.test-truth-maintenance
@@ -40,7 +43,10 @@
                                               ->Cold Cold
                                               ->ColdAndWindy ColdAndWindy
                                               ->WindSpeed WindSpeed
-                                              ->LousyWeather LousyWeather]]
+                                              ->LousyWeather LousyWeather
+                                              ->First First
+                                              ->Second Second
+                                              ->Third Third]]
                [schema.test :as st])
      (:require-macros [clara.tools.testing-utils :refer [def-rules-test]]
                       [cljs.test :refer [is deftest run-tests testing use-fixtures]])))
@@ -349,6 +355,68 @@
                              (retract (->Temperature 10 "MCI"))
                              fire-rules)
                          cold-query))))))
+
+(def-rules-test test-duplicate-insertions-with-only-one-removed
+
+  {:rules [r [[[ColdAndWindy (= ?t temperature)]]
+              (insert! (->Cold ?t))]]
+
+   :queries [q [[]
+                [[Cold (= ?t temperature)]]]]
+
+   :sessions [empty-session [r q] {}]}
+
+  (is (= (-> empty-session
+             (insert (->ColdAndWindy 10 10))
+             (insert (->ColdAndWindy 10 10))
+             (fire-rules)
+             (retract (->ColdAndWindy 10 10))
+             (fire-rules)
+             (query q))
+         [{:?t 10}])
+      "Removal of one duplicate fact that causes an immediately downstream rule to fire should not
+         retract insertions that were due to other duplicate facts."))
+
+(def-rules-test test-tiered-identical-insertions-with-retractions
+  ;; The idea here is to test the behavior when the retraction
+  ;; of a single token should cause multiple tokens to be retracted.
+
+  {:rules [r1 [[[First]]
+               (insert! (->Second) (->Second))]
+
+           r2 [[[Second]]
+               (insert! (->Third))]]
+
+   :queries [third-query [[] [[Third]]]
+             second-query [[] [[Second]]]]
+
+   :sessions [empty-session [r1 r2 third-query second-query] {}]}
+
+  (let [none-retracted-session (-> empty-session
+                                   (insert (->First) (->First))
+                                   (fire-rules))
+
+        one-retracted-session (-> none-retracted-session
+                                  (retract (->First))
+                                  fire-rules)
+
+        both-retracted-session (-> one-retracted-session
+                                   (retract (->First))
+                                   fire-rules)]
+
+    (is (= (query none-retracted-session second-query)
+           (query none-retracted-session third-query)
+           [{} {} {} {}])
+        "nothing retracted")
+    (is (= (query one-retracted-session second-query)
+           (query one-retracted-session third-query)
+           [{} {}])
+        "one First retracted")
+    (is (= (query both-retracted-session second-query)
+           (query both-retracted-session third-query))
+        "Both First facts retracted")))
+
+   
 
   
            
