@@ -8,6 +8,7 @@
                                     insert-unconditional!
                                     insert-all-unconditional!
                                     retract
+                                    retract!
                                     query]]
 
                [clara.rules.testfacts :refer [->Temperature ->Cold ->WindSpeed
@@ -36,6 +37,7 @@
                                     insert-all-unconditional!
                                     insert-all
                                     retract
+                                    retract!
                                     query]]
                [clara.rules.accumulators :as acc]
                [clara.rules.testfacts :refer [->Temperature Temperature
@@ -415,6 +417,31 @@
     (is (= (query both-retracted-session second-query)
            (query both-retracted-session third-query))
         "Both First facts retracted")))
+
+(def-rules-test duplicate-reasons-for-retraction-test
+
+  {:rules [r1 [[[First]]
+                           ;; As of writing the engine rearranges
+                           ;; this so that the retraction comes last.
+                           (do (retract! (->Cold 5))
+                               (insert! (->Third)))]
+           r2 [[[Second]
+                            [:not [Third]]]
+               (insert! (->Cold 5))]]
+
+   :queries [q [[] [[Cold (= ?t temperature)]]]]
+
+   :sessions [base-session [r1 r2 q] {}]}
+
+  (is (= (-> base-session
+               (insert (->Second))
+               (fire-rules)
+               (insert (->First))
+               (fire-rules)
+               (query q))
+           [])
+        "A retraction that becomes redundant after reordering of insertions
+         and retractions due to batching should not cause failure."))
 
    
 

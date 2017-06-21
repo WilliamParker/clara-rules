@@ -3459,27 +3459,6 @@
     (assert-ex-data {:condition (-> q2 :lhs first)}
                     (mk-session [q2]))))
 
-(deftest duplicate-reasons-for-retraction-test
-  (let [r1 (dsl/parse-rule [[First]]
-                           ;; As of writing the engine rearranges
-                           ;; this so that the retraction comes last.
-                           (do (retract! (->Cold 5))
-                               (insert! (->Third))))
-        r2 (dsl/parse-rule [[Second]
-                            [:not [Third]]]
-                           (insert! (->Cold 5)))
-        q (dsl/parse-query [] [[Cold (= ?t temperature)]])
-        base-session (mk-session [r1 r2 q])]
-    (is (= (-> base-session
-               (insert (->Second))
-               (fire-rules)
-               (insert (->First))
-               (fire-rules)
-               (query q))
-           [])
-        "A retraction that becomes redundant after reordering of insertions
-         and retractions due to batching should not cause failure.")))
-
 (deftest test-complex-nested-truth-maintenance-with-unconditional-insert
   (let [r (dsl/parse-rule [[Cold (= ?t temperature)]
                            [:not [:or [ColdAndWindy (= ?t temperature)]
