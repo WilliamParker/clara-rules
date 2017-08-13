@@ -4,12 +4,17 @@
    * inspect, which returns a data structure describing the session that can be used by tooling.
    * explain-activations, which uses inspect and prints a human-readable description covering
      why each rule activation or query match occurred."
-  (:require [clara.rules.compiler :as com]
-            [clara.rules.engine :as eng]
+  (:require [clara.rules.engine :as eng]
             [clara.rules.schema :as schema]
             [clara.rules.memory :as mem]
             [schema.core :as s]
-            [schema.macros :as sm]))
+            [schema.macros :as sm])
+  (:import [clara.rules.engine
+            RootJoinNode
+            HashJoinNode
+            ExpressionJoinNode
+            NegationNode
+            NegationWithJoinFilterNode]))
 
 (s/defschema ConditionMatch
   "A structure associating a condition with the facts that matched them.  The fields are:
@@ -56,18 +61,25 @@
 (defn- get-condition-matches
   "Returns facts matching each condition"
   [beta-graph memory]
-  (let [join-node-ids (for [[node-id beta-node] (:id-to-condition-node beta-graph)
-                            :let [node-type (:node-type beta-node)]
+  (let [node-class->node-type (fn [node]
+                                (get {ExpressionJoinNode :join
+                                      HashJoinNode :join
+                                      RootJoinNode :join
+                                      NegationNode :negation
+                                      NegationWithJoinFilterNode :negation} (type node)))
+        
+        join-node-ids (for [beta-node beta-graph 
+                            :let [node-type (node-class->node-type beta-node)]
                             :when (contains? #{:join :negation}
                                              node-type)]
-                        [node-id beta-node node-type])]
+                        [(:id beta-node) (:condition beta-node) node-type])]
     (reduce
-     (fn [matches [node-id beta-node node-type]]
+     (fn [matches [node-id condition node-type]]
        (update-in matches
                   (condp = node-type
 
                     :join
-                    [(:condition beta-node)]
+                    [condition]
 
                     ;; Negation nodes store the fact that they are a negation
                     ;; in their :node-type and strip the information out of the
@@ -75,7 +87,7 @@
                     ;; that is contained in rule and query data structures created by defrule
                     ;; and that conforms to the Condition schema.
                     :negation
-                    [[:not (:condition beta-node)]]) 
+                    [[:not condition]]) 
                   concat (map :fact (mem/get-elements-all memory {:id node-id}))))
      {}
      join-node-ids)))
@@ -156,9 +168,7 @@
    The above segment will return matches for the rule in question."
   [session] :- InspectionSchema
   (let [{:keys [memory rulebase]} (eng/components session)
-        {:keys [productions production-nodes query-nodes]} rulebase
-
-        beta-graph (com/to-beta-graph productions)
+        {:keys [productions production-nodes query-nodes beta-roots]} rulebase
 
         ;; Map of queries to their nodes in the network.
         query-to-nodes (into {} (for [[query-name query-node] query-nodes]
@@ -178,7 +188,7 @@
                             [query (to-explanations session
                                                     (mem/get-tokens-all memory query-node))]))
 
-     :condition-matches (get-condition-matches beta-graph memory)
+     :condition-matches (get-condition-matches beta-roots memory)
 
      :insertions (into {}
                        (for [[rule rule-node] rule-to-nodes]
