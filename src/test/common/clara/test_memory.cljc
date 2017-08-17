@@ -60,7 +60,7 @@
                         (for [i (range n)] (->Temperature i "MCI")))
         session (fire-rules session)]
 
-    (is (= n
+    (is (= #?(:clj n :cljs 0)
            (count (query session temp-query))))))
 
 (def-rules-test test-query-for-many-added-tokens
