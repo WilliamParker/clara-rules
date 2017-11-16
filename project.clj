@@ -9,7 +9,8 @@
                                   [org.clojure/data.fressian "0.2.1"]]}
              :provided {:dependencies [[org.clojure/clojurescript "1.7.170"]]}
              :recent-clj {:dependencies [^:replace [org.clojure/clojure "1.9.0-RC1"]
-                                         ^:replace [org.clojure/clojurescript "1.9.946"]]}}
+                                         ^:replace [org.clojure/clojurescript "1.9.946"]]
+                          :javac-options ^:replace ["-target" "1.7" "-source" "1.7"]}}
   :plugins [[lein-codox "0.10.3" :exclusions [org.clojure/clojure]]
             [lein-javadoc "0.3.0" :exclusions [org.clojure/clojure]]
             [lein-cljsbuild "1.1.7" :exclusions [org.clojure/clojure]]
