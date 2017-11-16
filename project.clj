@@ -11,10 +11,14 @@
              :recent-clj {:dependencies [^:replace [org.clojure/clojure "1.9.0-RC1"]
                                          ^:replace [org.clojure/clojurescript "1.9.946"]]
                           :javac-options ^:replace ["-target" "1.7" "-source" "1.7"]}}
-  :plugins [[lein-codox "0.10.3" :exclusions [org.clojure/clojure]]
-            [lein-javadoc "0.3.0" :exclusions [org.clojure/clojure]]
-            [lein-cljsbuild "1.1.7" :exclusions [org.clojure/clojure]]
-            [lein-figwheel "0.5.14" :exclusions [org.clojure/clojure]]]
+  :plugins [[lein-codox "0.10.3" :exclusions [org.clojure/clojure
+                                              org.clojure/clojurescript]]
+            [lein-javadoc "0.3.0" :exclusions [org.clojure/clojure
+                                               org.clojure/clojurescript]]
+            [lein-cljsbuild "1.1.7" :exclusions [org.clojure/clojure
+                                                 org.clojure/clojurescript]]
+            [lein-figwheel "0.5.14" :exclusions [org.clojure/clojure
+                                                 org.clojure/clojurescript]]]
   :codox {:namespaces [clara.rules clara.rules.dsl clara.rules.accumulators
                        clara.rules.listener clara.rules.durability
                        clara.tools.inspect clara.tools.tracing
