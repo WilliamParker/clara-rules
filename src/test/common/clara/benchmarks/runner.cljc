@@ -1,9 +1,5 @@
 (ns clara.benchmarks.runner
-  (:require [clara.benchmarks.compilation]))
-
-(defn print-and-return [x]
-  (println x)
-  x)
+  (:require #?(:clj [clara.benchmarks.compilation])))
 
 (defn deref-with-meta
   [benchmark-var]
@@ -17,7 +13,7 @@
                              (map ns-publics)
 
                              (mapcat vals)
-                             (filter #(-> % print-and-return meta :benchmark true?))
+                             (filter #(-> % meta :benchmark true?))
                              (map deref-with-meta))
                             benchmark-namespaces)]
     benchmark-fns))
