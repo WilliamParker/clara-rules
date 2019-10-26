@@ -5,8 +5,8 @@
             [clara.tools.testing-utils :refer [def-rules-test
                                                ex-data-maps
                                                side-effect-holder-fixture
-                                               side-effect-holder]]
-            [clara.test-rules :refer [assert-ex-data]]
+                                               side-effect-holder
+                                               assert-ex-data]]
             [clara.tools.tracing :as tr]
             [clara.rules.accumulators :as acc])
   (:import [clara.rules.testfacts Cold Hot First Second]
